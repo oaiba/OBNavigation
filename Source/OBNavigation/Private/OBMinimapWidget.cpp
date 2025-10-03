@@ -11,29 +11,11 @@ void UOBMinimapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Get and cache the subsystem
-	if (const UGameInstance* GI = GetGameInstance())
-	{
-		NavSubsystem = GI->GetSubsystem<UOBNavigationSubsystem>();
-	}
-
-	if (NavSubsystem)
-	{
-		// Bind to the delegate to react to map changes
-		NavSubsystem->OnMinimapLayerChanged.AddDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
-		// Force an initial setup
-		OnMinimapLayerChanged(NavSubsystem->GetCurrentMinimapLayer());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - OBNavigationSubsystem is not valid!"), *GetName(), __FUNCTION__);
-		SetVisibility(ESlateVisibility::Collapsed);
-		return;
-	}
-
+	// --- BƯỚC 1: Khởi tạo các thành phần UI và Material trước ---
 	if (MapImage)
 	{
-		// Create a dynamic material instance from the material assigned to the image in the editor
+		// Create a dynamic material instance from the material assigned to the image in the editor.
+		// This MUST be done before we try to use it.
 		MinimapMaterialInstance = MapImage->GetDynamicMaterial();
 		if (!MinimapMaterialInstance)
 		{
@@ -41,6 +23,38 @@ void UOBMinimapWidget::NativeConstruct()
 				   TEXT("[%s::%hs] - MapImage does not have a material assigned or it cannot be made dynamic."),
 				   *GetName(), __FUNCTION__);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - MapImage is not bound in the widget blueprint!"), *GetName(), __FUNCTION__);
+	}
+
+
+	// --- BƯỚC 2: Lấy Subsystem và gán Delegate ---
+	if (const UGameInstance* GI = GetGameInstance())
+	{
+		NavSubsystem = GI->GetSubsystem<UOBNavigationSubsystem>();
+	}
+
+	if (NavSubsystem)
+	{
+		// Bind to the delegate to react to future map changes
+		NavSubsystem->OnMinimapLayerChanged.AddDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
+
+		// --- BƯỚC 3: Thực hiện thiết lập ban đầu SAU KHI mọi thứ đã sẵn sàng ---
+		// Now that MinimapMaterialInstance is valid, we can safely call this to set the initial texture.
+		OnMinimapLayerChanged(NavSubsystem->GetCurrentMinimapLayer());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - OBNavigationSubsystem is not valid!"), *GetName(), __FUNCTION__);
+		if (MapImage) MapImage->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	// If anything failed, hide the widget to prevent errors in Tick
+	if (!MinimapMaterialInstance || !NavSubsystem)
+	{
+		SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
