@@ -16,8 +16,9 @@ void UOBMinimapWidget::NativeConstruct()
 		MinimapMaterialInstance = MapImage->GetDynamicMaterial();
 		if (MinimapMaterialInstance)
 		{
-			// Set the STATIC map rotation offset ONE TIME. This uses the new parameter.
-			MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad", FMath::DegreesToRadians(MapRotationOffset));
+			// The total static rotation is the sum of the alignment and the manual offset.
+			const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
+			MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad", FMath::DegreesToRadians(TotalStaticRotation));
 		}
 		else
 		{
@@ -53,8 +54,8 @@ void UOBMinimapWidget::SetMapRotationOffset(float NewOffsetYaw)
 
 	if (MinimapMaterialInstance)
 	{
-		// Update the STATIC map rotation offset when called. This uses the new parameter.
-		MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad", FMath::DegreesToRadians(MapRotationOffset));
+		const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
+		MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad", FMath::DegreesToRadians(TotalStaticRotation));
 	}
 }
 
@@ -76,8 +77,10 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	// The player icon ALWAYS rotates based on the character's forward direction (ActorRotation).
 	if (PlayerIcon)
 	{
-		const float PlayerIconYaw = TrackedPawn->GetActorRotation().Yaw;
-		PlayerIcon->SetRenderTransformAngle(PlayerIconYaw);
+		const float PlayerActorYaw = TrackedPawn->GetActorRotation().Yaw;
+		// The final icon angle is the actor's world yaw PLUS the map's base alignment rotation.
+		const float FinalIconYaw = PlayerActorYaw + GetAlignmentAngle();
+		PlayerIcon->SetRenderTransformAngle(FinalIconYaw);
 	}
 
 	// --- LOGIC CẬP NHẬT BẢN ĐỒ ---
@@ -88,12 +91,13 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 			// Update player's position on the map
 			MinimapMaterialInstance->SetVectorParameterValue("PlayerPositionUV", FLinearColor(PlayerUV.X, PlayerUV.Y, 0.0f, 0.0f));
 
-			// --- LOGIC CẬP NHẬT DYNAMIC ROTATION ---
-			float DynamicMapYaw = 0.0f; // Default to 0 (no dynamic rotation)
 
 			// If the map is set to rotate dynamically, calculate the yaw.
 			if (bShouldRotateMap)
 			{
+				// --- LOGIC CẬP NHẬT DYNAMIC ROTATION ---
+				float DynamicMapYaw = 0.0f; // Default to 0 (no dynamic rotation)
+
 				switch (RotationSource)
 				{
 				case EMinimapRotationSource::ControlRotation:
@@ -103,10 +107,11 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 					DynamicMapYaw = TrackedPawn->GetActorRotation().Yaw;
 					break;
 				}
+				
+				// The final dynamic rotation also needs to be aligned with the map's base.
+				const float FinalDynamicRotation = DynamicMapYaw + GetAlignmentAngle();
+				MinimapMaterialInstance->SetScalarParameterValue("PlayerYaw", FMath::DegreesToRadians(FinalDynamicRotation));
 			}
-			
-			// Set the DYNAMIC rotation parameter. If map is static, this will always be 0.
-			MinimapMaterialInstance->SetScalarParameterValue("PlayerYaw", FMath::DegreesToRadians(DynamicMapYaw));
 
 			// Always update zoom
 			MinimapMaterialInstance->SetScalarParameterValue("Zoom", Zoom);
@@ -131,5 +136,17 @@ void UOBMinimapWidget::OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer)
 	{
 		// No valid map, hide the minimap image
 		MapImage->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+float UOBMinimapWidget::GetAlignmentAngle() const
+{
+	switch (MapAlignment)
+	{
+	case EMapAlignment::Forward_PlusX:   return 0.0f;
+	case EMapAlignment::Right_PlusY:     return 90.0f;
+	case EMapAlignment::Backward_MinusX: return 180.0f;
+	case EMapAlignment::Left_MinusY:     return -90.0f;
+	default:                             return 0.0f;
 	}
 }

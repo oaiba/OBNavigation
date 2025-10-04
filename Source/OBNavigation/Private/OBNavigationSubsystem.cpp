@@ -143,18 +143,16 @@ bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, cons
 		return false;
 	}
 
-	// Calculate local position within the bounds (origin at Min)
 	const double LocalX = WorldLocation.X - Bounds.Min.X;
 	const double LocalY = WorldLocation.Y - Bounds.Min.Y;
 
-	// --- LOGIC ĐÃ SỬA LỖI ---
-	// The horizontal UV coordinate (U) should correspond to the world's Right/Left axis (Y).
+	// STANDARD MAPPING:
+	// World Y (+Y is Right) maps to the horizontal U coordinate.
 	OutMapUV.X = LocalY / WorldSize.Y;
 
-	// The vertical UV coordinate (V) should correspond to the world's Forward/Backward axis (X).
-	// We flip it because in world space +X is forward ("up" on the map), 
-	// but in UV space "up" is towards V=0.
-	OutMapUV.Y = LocalX / WorldSize.X;
+	// World X (+X is Forward/North) maps to the vertical V coordinate.
+	// We flip it so that North (+X) is at the top of the map (V=0).
+	OutMapUV.Y = 1.0 - (LocalX / WorldSize.X);
 
 	return true;
 }

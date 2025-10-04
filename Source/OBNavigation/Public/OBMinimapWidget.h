@@ -26,6 +26,26 @@ enum class EMinimapRotationSource : uint8
 };
 
 /**
+ * @enum EMapAlignment
+ * @brief Defines which world axis should be treated as "Up" on the minimap.
+ */
+UENUM(BlueprintType)
+enum class EMapAlignment : uint8
+{
+	// World Forward (+X) is Up on the map. (Default)
+	Forward_PlusX   UMETA(DisplayName = "Forward (+X) is Up"),
+
+	// World Right (+Y) is Up on the map.
+	Right_PlusY     UMETA(DisplayName = "Right (+Y) is Up"),
+
+	// World Backward (-X) is Up on the map.
+	Backward_MinusX UMETA(DisplayName = "Backward (-X) is Up"),
+	
+	// World Left (-Y) is Up on the map.
+	Left_MinusY     UMETA(DisplayName = "Left (-Y) is Up")
+};
+
+/**
  * @class UOBMinimapWidget
  * @brief Displays the minimap. Updates are optimized by driving a dynamic material instance.
  */
@@ -77,7 +97,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings", meta = (EditCondition = "!bShouldRotateMap"))
 	float MapRotationOffset = 0.0f;
 
+	// Determines which world axis is considered "Up" for the entire minimap, aligning both the map and icons.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
+	EMapAlignment MapAlignment = EMapAlignment::Forward_PlusX;
+
 private:
+
+	float GetAlignmentAngle() const;
+	
 	// Cached pointer to our subsystem for quick access
 	UPROPERTY(Transient)
 	TObjectPtr<UOBNavigationSubsystem> NavSubsystem;
