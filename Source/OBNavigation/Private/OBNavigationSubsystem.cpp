@@ -50,7 +50,7 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 	{
 		TrackedPlayerPawn = PlayerPawn;
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Now tracking pawn: %s"), *GetName(), __FUNCTION__,
-			   *PlayerPawn->GetName());
+		       *PlayerPawn->GetName());
 		// Force an immediate update
 		UpdateActiveMinimapLayer();
 	}
@@ -61,19 +61,21 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 	}
 }
 
-FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName, FVector InStaticLocation)
+FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig,
+                                                FName InLayerName, FVector InStaticLocation)
 {
 	// Ensure the config is valid before proceeding
 	if (!InConfig)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Failed to register marker: InConfig is null."), *GetName(), __FUNCTION__);
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Failed to register marker: InConfig is null."), *GetName(),
+		       __FUNCTION__);
 		return FGuid(); // Return invalid Guid
 	}
 
 	// Create a new marker object
 	UOBMapMarker* NewMarker = NewObject<UOBMapMarker>(this);
 	const FGuid NewGuid = FGuid::NewGuid();
-	
+
 	NewMarker->Init(NewGuid, InTrackedActor, InConfig, InLayerName, InStaticLocation);
 
 	// Add to our map and broadcast changes
@@ -81,7 +83,8 @@ FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarke
 	RebuildActiveMarkersArray();
 	OnMarkersUpdated.Broadcast();
 
-	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Registered new marker with ID: %s"), *GetName(), __FUNCTION__, *NewGuid.ToString());
+	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Registered new marker with ID: %s"), *GetName(), __FUNCTION__,
+	       *NewGuid.ToString());
 
 	return NewGuid;
 }
@@ -90,7 +93,8 @@ void UOBNavigationSubsystem::UnregisterMapMarker(const FGuid& MarkerID)
 {
 	if (!MarkerID.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Attempted to unregister an invalid marker ID."), *GetName(), __FUNCTION__);
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Attempted to unregister an invalid marker ID."), *GetName(),
+		       __FUNCTION__);
 		return;
 	}
 
@@ -99,11 +103,13 @@ void UOBNavigationSubsystem::UnregisterMapMarker(const FGuid& MarkerID)
 		// If removal was successful, update the cached array and notify UI
 		RebuildActiveMarkersArray();
 		OnMarkersUpdated.Broadcast();
-		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Unregistered marker with ID: %s"), *GetName(), __FUNCTION__, *MarkerID.ToString());
+		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Unregistered marker with ID: %s"), *GetName(), __FUNCTION__,
+		       *MarkerID.ToString());
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Could not find marker with ID to unregister: %s"), *GetName(), __FUNCTION__, *MarkerID.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Could not find marker with ID to unregister: %s"), *GetName(),
+		       __FUNCTION__, *MarkerID.ToString());
 	}
 }
 
@@ -116,7 +122,7 @@ void UOBNavigationSubsystem::RebuildActiveMarkersArray()
 }
 
 bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation,
-										  FVector2D& OutMapUV) const
+                                          FVector2D& OutMapUV) const
 {
 	if (!MapLayer)
 	{
@@ -133,21 +139,25 @@ bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, cons
 	if (FMath::IsNearlyZero(WorldSize.X) || FMath::IsNearlyZero(WorldSize.Y))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - MapLayer '%s' has zero size on X or Y axis."), *GetName(),
-			   __FUNCTION__, *MapLayer->GetName());
+		       __FUNCTION__, *MapLayer->GetName());
 		return false;
 	}
 
-	// In Unreal's world space, X is forward, Y is right.
+	// Calculate local position within the bounds (origin at Min)
 	const double LocalX = WorldLocation.X - Bounds.Min.X;
 	const double LocalY = WorldLocation.Y - Bounds.Min.Y;
 
-	// UV coordinates range from 0 to 1. Y is often flipped in texture space.
-	OutMapUV.X = LocalX / WorldSize.X;
-	OutMapUV.Y = 1.0 - (LocalY / WorldSize.Y); // Flip Y for standard UV space
+	// --- LOGIC ĐÃ SỬA LỖI ---
+	// The horizontal UV coordinate (U) should correspond to the world's Right/Left axis (Y).
+	OutMapUV.X = LocalY / WorldSize.Y;
+
+	// The vertical UV coordinate (V) should correspond to the world's Forward/Backward axis (X).
+	// We flip it because in world space +X is forward ("up" on the map), 
+	// but in UV space "up" is towards V=0.
+	OutMapUV.Y = LocalX / WorldSize.X;
 
 	return true;
 }
-
 
 bool UOBNavigationSubsystem::Tick(float DeltaTime)
 {
@@ -185,7 +195,7 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 	{
 		CurrentMinimapLayer = BestLayer;
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Minimap layer changed to: %s"), *GetName(), __FUNCTION__,
-			   BestLayer ? *BestLayer->GetName() : TEXT("None"));
+		       BestLayer ? *BestLayer->GetName() : TEXT("None"));
 		OnMinimapLayerChanged.Broadcast(CurrentMinimapLayer);
 	}
 }

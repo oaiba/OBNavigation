@@ -12,6 +12,20 @@ class UOBMapLayerAsset;
 class UMaterialInstanceDynamic;
 
 /**
+ * @enum EMinimapRotationSource
+ * @brief Defines the source of rotation for the dynamic map orientation.
+ */
+UENUM(BlueprintType)
+enum class EMinimapRotationSource : uint8
+{
+	// Use the Pawn's Control Rotation (camera direction). Ideal for First-Person / Third-Person games.
+	ControlRotation UMETA(DisplayName = "Control Rotation (Camera)"),
+
+	// Use the Pawn's Actor Rotation (forward direction of the mesh). Ideal for Top-Down / Twin-Stick games.
+	ActorRotation UMETA(DisplayName = "Actor Rotation (Character Forward)")
+};
+
+/**
  * @class UOBMinimapWidget
  * @brief Displays the minimap. Updates are optimized by driving a dynamic material instance.
  */
@@ -19,6 +33,16 @@ UCLASS()
 class OBNAVIGATION_API UOBMinimapWidget : public UUserWidget
 {
 	GENERATED_BODY()
+
+public:
+	/**
+	 * @brief Sets a permanent rotation offset for the map texture.
+	 * Useful for Top-Down/Isometric games where the camera has a fixed world rotation.
+	 * @param NewOffsetYaw The new rotation offset in degrees.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Minimap Settings")
+	void SetMapRotationOffset(float NewOffsetYaw);
+
 protected:
 	// UUserWidget overrides
 	virtual void NativeConstruct() override;
@@ -29,7 +53,6 @@ protected:
 	void OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer);
 
 	// The UImage widget in our UMG designer that will display the map.
-	// We must bind this in the Blueprint child class.
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> MapImage;
 
@@ -37,9 +60,22 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> PlayerIcon;
 
-	// The desired zoom level for the minimap
+	// The desired zoom level for the minimap.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
 	float Zoom = 5.0f;
+
+	// Determines which rotation to use for the map's orientation WHEN bShouldRotateMap is TRUE.
+	// This setting has NO effect on the player icon's rotation.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
+	EMinimapRotationSource RotationSource = EMinimapRotationSource::ActorRotation;
+
+	// If true, the map texture itself will rotate dynamically. If false, the map remains static.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
+	bool bShouldRotateMap = false;
+
+	// A fixed rotation offset (in degrees) applied to the map texture WHEN bShouldRotateMap is FALSE.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings", meta = (EditCondition = "!bShouldRotateMap"))
+	float MapRotationOffset = 0.0f;
 
 private:
 	// Cached pointer to our subsystem for quick access
