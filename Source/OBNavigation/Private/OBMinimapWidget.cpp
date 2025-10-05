@@ -6,51 +6,91 @@
 #include "Components/CanvasPanelSlot.h"
 #include "OBNavigationSubsystem.h"
 #include "OBMapLayerAsset.h"
+#include "Data/OBMinimapConfigAsset.h"
 #include "Materials/MaterialInstanceDynamic.h"
-#include "Kismet/KismetMathLibrary.h"
 
-// In OBMinimapWidget.cpp
-
-void UOBMinimapWidget::NativeConstruct()
+void UOBMinimapWidget::InitializeAndStartTracking(UOBMinimapConfigAsset* InConfigAsset)
 {
-	Super::NativeConstruct();
+	if (bIsInitializedAndTracking)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Widget is already initialized."), *GetName(), __FUNCTION__);
+		return;
+	}
 
-	if (MapImage) { MinimapMaterialInstance = MapImage->GetDynamicMaterial(); }
+	if (!InConfigAsset)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - Initialization failed: Invalid ConfigAsset provided."), *GetName(),
+		       __FUNCTION__);
+		SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	ConfigAsset = InConfigAsset;
+
+	// --- 1. COPY CONFIG VALUES TO INTERNAL STATE ---
+	CurrentMapRotationOffset = ConfigAsset->MapRotationOffset;
+	CurrentMinimapShape = ConfigAsset->MinimapShape;
+
+	// --- 2. SETUP VISUAL ASSETS FROM CONFIG ---
+	if (MapImage && ConfigAsset->MinimapBackgroundMaterial)
+	{
+		MinimapMaterialInstance = UMaterialInstanceDynamic::Create(ConfigAsset->MinimapBackgroundMaterial, this);
+		MapImage->SetBrushFromMaterial(MinimapMaterialInstance);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - Failed to set up MapImage material."), *GetName(), __FUNCTION__);
+	}
+
+	if (PlayerIcon && ConfigAsset->PlayerIconTexture)
+	{
+		PlayerIcon->SetBrushFromTexture(ConfigAsset->PlayerIconTexture);
+	}
+
+	if (CompassRingImage && ConfigAsset->CompassRingTexture)
+	{
+		CompassRingImage->SetBrushFromTexture(ConfigAsset->CompassRingTexture);
+	}
+
+	// --- 3. SETUP SUBSYSTEM & DELEGATES ---
 	if (const UGameInstance* GI = GetGameInstance())
 	{
 		NavSubsystem = GI->GetSubsystem<UOBNavigationSubsystem>();
 		if (NavSubsystem)
 		{
 			NavSubsystem->OnMinimapLayerChanged.AddDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
+			// Initial layer setup
 			OnMinimapLayerChanged(NavSubsystem->GetCurrentMinimapLayer());
 		}
 	}
 
-	// Force an initial update of static rotations
-	SetMapRotationOffset(MapRotationOffset);
-	SetMinimapShape(MinimapShape);
+	// --- 4. APPLY INITIAL SETTINGS FROM COPIED STATE ---
+	SetMapRotationOffset(CurrentMapRotationOffset);
+	SetMinimapShape(CurrentMinimapShape);
 
+	// --- 5. VALIDATE AND START ---
 	if (!MinimapMaterialInstance || !NavSubsystem)
 	{
+		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - Initialization failed due to missing subsystem or material instance."),
+		       *GetName(), __FUNCTION__);
 		SetVisibility(ESlateVisibility::Collapsed);
+		return;
 	}
+
+	bIsInitializedAndTracking = true;
+	SetVisibility(ESlateVisibility::SelfHitTestInvisible); // Make it visible
+	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Minimap initialized and tracking started."), *GetName(), __FUNCTION__);
 }
 
 void UOBMinimapWidget::SetMapRotationOffset(float NewOffsetYaw)
 {
-	MapRotationOffset = NewOffsetYaw;
-
+	CurrentMapRotationOffset = NewOffsetYaw;
 	if (MinimapMaterialInstance)
 	{
-		// Calculate the one, true static rotation for the entire system
-		const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
-
-		// Apply it to the map material
+		const float TotalStaticRotation = CurrentMapRotationOffset + GetAlignmentAngle();
 		MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad",
 		                                                 FMath::DegreesToRadians(TotalStaticRotation));
-
-		// Apply it to the compass ring image
-		if (bIsCompassEnabled && CompassRingImage)
+		if (GetConfig()->bIsCompassEnabled && CompassRingImage)
 		{
 			CompassRingImage->SetRenderTransformAngle(-TotalStaticRotation);
 		}
@@ -59,10 +99,10 @@ void UOBMinimapWidget::SetMapRotationOffset(float NewOffsetYaw)
 
 void UOBMinimapWidget::SetMinimapShape(const EMinimapShape NewShape)
 {
-	MinimapShape = NewShape;
+	CurrentMinimapShape = NewShape;
 	if (MinimapMaterialInstance)
 	{
-		const float ShapeValue = (MinimapShape == EMinimapShape::Circle) ? 1.0f : 0.0f;
+		const float ShapeValue = (CurrentMinimapShape == EMinimapShape::Circle) ? 1.0f : 0.0f;
 		MinimapMaterialInstance->SetScalarParameterValue("ShapeAlpha", ShapeValue);
 	}
 }
@@ -71,6 +111,12 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	// Only run the tick logic if the widget has been properly initialized.
+	if (!bIsInitializedAndTracking)
+	{
+		return;
+	}
+
 	if (!NavSubsystem || !NavSubsystem->GetTrackedPlayerPawn()) { return; }
 
 	const APawn* TrackedPawn = NavSubsystem->GetTrackedPlayerPawn();
@@ -78,7 +124,7 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 
 	// --- UNIFIED ROTATION LOGIC ---
 	const float AlignmentAngle = GetAlignmentAngle();
-	const float TotalStaticRotation = MapRotationOffset + AlignmentAngle;
+	const float TotalStaticRotation = CurrentMapRotationOffset + AlignmentAngle;
 
 	// --- PLAYER ICON ---
 	const float CharacterWorldYaw = TrackedPawn->GetActorRotation().Yaw;
@@ -86,15 +132,6 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	if (PlayerIcon)
 	{
 		PlayerIcon->SetRenderTransformAngle(FinalIconYaw);
-	}
-
-	// --- COMPASS RING ---
-	if (bIsCompassEnabled && CompassRingImage)
-	{
-		// Compass Ring's rotation is now set only once in Construct/Set, but we can log it
-		// For a dynamic compass (old logic), it would be:
-		// const float CompassRingRotation = TotalStaticRotation - CharacterWorldYaw;
-		// CompassRingImage->SetRenderTransformAngle(CompassRingRotation);
 	}
 
 	// --- MINIMAP MATERIAL ---
@@ -108,9 +145,9 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 
 			// Set DYNAMIC rotation (for rotating maps)
 			float DynamicMapYaw = 0.0f;
-			if (bShouldRotateMap)
+			if (ConfigAsset->bShouldRotateMap)
 			{
-				switch (RotationSource)
+				switch (ConfigAsset->RotationSource)
 				{
 				case EMinimapRotationSource::ControlRotation:
 					DynamicMapYaw = TrackedPawn->GetControlRotation().Yaw;
@@ -127,10 +164,10 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 			                                                 FMath::DegreesToRadians(TotalStaticRotation));
 
 			// Set Zoom
-			MinimapMaterialInstance->SetScalarParameterValue("Zoom", Zoom);
+			MinimapMaterialInstance->SetScalarParameterValue("Zoom", ConfigAsset->Zoom);
 
 			// --- DEBUG LOGS ---
-			if (GEngine && bShowDebugMessages)
+			if (GEngine && ConfigAsset->bShowDebugMessages)
 			{
 				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Cyan,
 				                                 FString::Printf(TEXT("--- MINIMAP DEBUG ---")));
@@ -139,7 +176,8 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::White,
 				                                 FString::Printf(TEXT("Alignment Angle: %.2f"), AlignmentAngle));
 				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::White,
-				                                 FString::Printf(TEXT("Map Offset: %.2f"), MapRotationOffset));
+				                                 FString::Printf(
+					                                 TEXT("Map Offset: %.2f"), ConfigAsset->MapRotationOffset));
 				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Yellow,
 				                                 FString::Printf(
 					                                 TEXT("=> Total Static Rotation: %.2f"), TotalStaticRotation));
@@ -156,8 +194,8 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		}
 	}
 
-	// --- COMPASS MARKERS ---
-	if (bIsCompassEnabled && CompassMarkerCanvas)
+	// --- COMPASS LOGIC ---
+	if (ConfigAsset->bIsCompassEnabled && CompassMarkerCanvas)
 	{
 		UpdateCompassMarkers(TrackedPawn, TotalStaticRotation);
 	}
@@ -185,8 +223,8 @@ void UOBMinimapWidget::UpdateCompassMarkers(const APawn* TrackedPawn, float InTo
 		const float MarkerFinalAngle = MarkerWorldYaw + InTotalStaticRotation;
 
 		const float AngleRad = FMath::DegreesToRadians(MarkerFinalAngle);
-		const float PosX = CanvasCenter.X + CompassMarkerRadius * FMath::Cos(AngleRad);
-		const float PosY = CanvasCenter.Y + CompassMarkerRadius * FMath::Sin(AngleRad);
+		const float PosX = CanvasCenter.X + ConfigAsset->CompassMarkerRadius * FMath::Cos(AngleRad);
+		const float PosY = CanvasCenter.Y + ConfigAsset->CompassMarkerRadius * FMath::Sin(AngleRad);
 
 		UImage* MarkerIcon = ActiveCompassMarkerWidgets.FindRef(Marker->MarkerID);
 		if (!MarkerIcon)
@@ -244,7 +282,7 @@ void UOBMinimapWidget::OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer)
 
 float UOBMinimapWidget::GetAlignmentAngle() const
 {
-	switch (MapAlignment)
+	switch (ConfigAsset->MapAlignment)
 	{
 	case EMapAlignment::Forward_PlusX: return 0.0f;
 	case EMapAlignment::Right_PlusY: return 90.0f;
