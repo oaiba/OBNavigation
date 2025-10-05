@@ -34,16 +34,27 @@ UENUM(BlueprintType)
 enum class EMapAlignment : uint8
 {
 	// World Forward (+X) is Up on the map. (Default)
-	Forward_PlusX   UMETA(DisplayName = "Forward (+X) is Up"),
+	Forward_PlusX UMETA(DisplayName = "Forward (+X) is Up"),
 
 	// World Right (+Y) is Up on the map.
-	Right_PlusY     UMETA(DisplayName = "Right (+Y) is Up"),
+	Right_PlusY UMETA(DisplayName = "Right (+Y) is Up"),
 
 	// World Backward (-X) is Up on the map.
 	Backward_MinusX UMETA(DisplayName = "Backward (-X) is Up"),
-	
+
 	// World Left (-Y) is Up on the map.
-	Left_MinusY     UMETA(DisplayName = "Left (-Y) is Up")
+	Left_MinusY UMETA(DisplayName = "Left (-Y) is Up")
+};
+
+/**
+ * @enum EMinimapShape
+ * @brief Defines the clipping shape for the minimap.
+ */
+UENUM(BlueprintType)
+enum class EMinimapShape : uint8
+{
+	Square UMETA(DisplayName = "Square"),
+	Circle UMETA(DisplayName = "Circle")
 };
 
 /**
@@ -57,12 +68,20 @@ class OBNAVIGATION_API UOBMinimapWidget : public UUserWidget
 
 public:
 	/**
-	 * @brief Sets a permanent rotation offset for the map texture.
-	 * Useful for Top-Down/Isometric games where the camera has a fixed world rotation.
-	 * @param NewOffsetYaw The new rotation offset in degrees.
+	 * @brief Updates the map rotation offset applied to the minimap texture and related compass elements.
+	 * @param NewOffsetYaw The new rotation offset, in degrees, to be applied to the minimap.
+	 *                     This value affects the orientation of the map texture and compass ring.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Minimap Settings")
 	void SetMapRotationOffset(float NewOffsetYaw);
+
+	/**
+	 * @brief Sets the shape of the minimap display.
+	 * Changes the minimap's shape to either a square or a circle and updates the corresponding material instance.
+	 * @param NewShape The desired shape for the minimap, represented by the EMinimapShape enum.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Minimap Settings")
+	void SetMinimapShape(EMinimapShape NewShape);
 
 protected:
 	// UUserWidget overrides
@@ -84,7 +103,7 @@ protected:
 	// --- COMPASS WIDGETS ---
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> CompassRingImage;
-	
+
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UCanvasPanel> CompassMarkerCanvas;
 
@@ -103,32 +122,37 @@ protected:
 	bool bShouldRotateMap = false;
 
 	// A fixed rotation offset (in degrees) applied to the map texture WHEN bShouldRotateMap is FALSE.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings", meta = (EditCondition = "!bShouldRotateMap"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings",
+		meta = (EditCondition = "!bShouldRotateMap"))
 	float MapRotationOffset = 0.0f;
 
 	// Determines which world axis is considered "Up" for the entire minimap, aligning both the map and icons.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
 	EMapAlignment MapAlignment = EMapAlignment::Forward_PlusX;
 
+	// The clipping shape of the minimap.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
+	EMinimapShape MinimapShape = EMinimapShape::Square;
+
 	// --- COMPASS SETTINGS ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Compass Settings")
 	bool bIsCompassEnabled = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Compass Settings", meta = (EditCondition = "bIsCompassEnabled"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Compass Settings",
+		meta = (EditCondition = "bIsCompassEnabled"))
 	float CompassMarkerRadius = 200.0f;
 
 	// --- DEBUG SETTINGS ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
 	bool bShowDebugMessages = false;
-	
-private:
 
+private:
 	// Helper function to get the base rotation angle from the alignment enum.
 	float GetAlignmentAngle() const;
 
 	// Helper function to update the compass and its markers.
 	void UpdateCompassMarkers(const APawn* TrackedPawn, float InTotalStaticRotation);
-	
+
 	// Cached pointer to our subsystem for quick access
 	UPROPERTY(Transient)
 	TObjectPtr<UOBNavigationSubsystem> NavSubsystem;
