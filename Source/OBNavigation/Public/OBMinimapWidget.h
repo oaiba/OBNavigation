@@ -117,13 +117,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Compass Settings", meta = (EditCondition = "bIsCompassEnabled"))
 	float CompassMarkerRadius = 200.0f;
 
+	// --- DEBUG SETTINGS ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
+	bool bShowDebugMessages = false;
+	
 private:
 
 	// Helper function to get the base rotation angle from the alignment enum.
 	float GetAlignmentAngle() const;
 
 	// Helper function to update the compass and its markers.
-	void UpdateCompass(const APawn* TrackedPawn, float InTotalStaticRotation);
+	void UpdateCompassMarkers(const APawn* TrackedPawn, float InTotalStaticRotation);
 	
 	// Cached pointer to our subsystem for quick access
 	UPROPERTY(Transient)

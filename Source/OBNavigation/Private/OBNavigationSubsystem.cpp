@@ -147,13 +147,20 @@ bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, cons
 	const double LocalY = WorldLocation.Y - Bounds.Min.Y;
 
 	// STANDARD MAPPING:
-	// World Y (+Y is Right) maps to the horizontal U coordinate.
+	// World +Y (Right) maps to the horizontal U coordinate.
 	OutMapUV.X = LocalY / WorldSize.Y;
 
-	// World X (+X is Forward/North) maps to the vertical V coordinate.
-	// We flip it so that North (+X) is at the top of the map (V=0).
+	// World +X (Forward/North) maps to the vertical V coordinate.
+	// We flip it so North (+X) is at the top of the map (V=0).
 	OutMapUV.Y = 1.0 - (LocalX / WorldSize.X);
 
+	// --- DEBUG LOG ---
+	if (GEngine)
+	{
+		const FString DebugMsg = FString::Printf(TEXT("[WorldToMapUV] WorldLoc: %s -> UV: %s"), *WorldLocation.ToString(), *OutMapUV.ToString());
+		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Green, DebugMsg);
+	}
+	
 	return true;
 }
 
