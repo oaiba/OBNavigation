@@ -2,32 +2,21 @@
 
 #include "OBMinimapWidget.h"
 #include "Components/Image.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "OBNavigationSubsystem.h"
 #include "OBMapLayerAsset.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Kismet/KismetMathLibrary.h"
 
 void UOBMinimapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Create Dynamic Material Instance first
+	// Create Dynamic Material Instance for the map
 	if (MapImage)
 	{
 		MinimapMaterialInstance = MapImage->GetDynamicMaterial();
-		if (MinimapMaterialInstance)
-		{
-			// The total static rotation is the sum of the alignment and the manual offset.
-			const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
-			MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad", FMath::DegreesToRadians(TotalStaticRotation));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - Failed to create Dynamic Material Instance for MapImage."), *GetName(), __FUNCTION__);
-		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - MapImage is not bound in the widget blueprint!"), *GetName(), __FUNCTION__);
 	}
 
 	// Get Subsystem and bind delegates
@@ -38,6 +27,22 @@ void UOBMinimapWidget::NativeConstruct()
 		{
 			NavSubsystem->OnMinimapLayerChanged.AddDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
 			OnMinimapLayerChanged(NavSubsystem->GetCurrentMinimapLayer());
+		}
+	}
+
+	// --- INITIAL STATIC ROTATION SETUP ---
+	if (MinimapMaterialInstance)
+	{
+		const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
+
+		// Apply static rotation to the map material
+		MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad",
+		                                                 FMath::DegreesToRadians(TotalStaticRotation));
+
+		// Apply the same static rotation to the compass ring image
+		if (bIsCompassEnabled && CompassRingImage)
+		{
+			CompassRingImage->SetRenderTransformAngle(TotalStaticRotation);
 		}
 	}
 
@@ -55,7 +60,15 @@ void UOBMinimapWidget::SetMapRotationOffset(float NewOffsetYaw)
 	if (MinimapMaterialInstance)
 	{
 		const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
-		MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad", FMath::DegreesToRadians(TotalStaticRotation));
+
+		// Update static rotation for both map and compass ring
+		MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad",
+		                                                 FMath::DegreesToRadians(TotalStaticRotation));
+
+		if (bIsCompassEnabled && CompassRingImage)
+		{
+			CompassRingImage->SetRenderTransformAngle(TotalStaticRotation);
+		}
 	}
 }
 
@@ -63,41 +76,26 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (!NavSubsystem || !MinimapMaterialInstance || !NavSubsystem->GetTrackedPlayerPawn())
+	if (!NavSubsystem || !NavSubsystem->GetTrackedPlayerPawn())
 	{
-		// This log is commented out to prevent spam, but can be re-enabled for debugging.
-		// UE_LOG_ONCE(LogTemp, Warning, TEXT("[%s::%hs] - Skipping minimap update due to invalid subsystem, material, or tracked pawn."), *GetName(), __FUNCTION__);
 		return;
 	}
 
 	const APawn* TrackedPawn = NavSubsystem->GetTrackedPlayerPawn();
 	const UOBMapLayerAsset* CurrentLayer = NavSubsystem->GetCurrentMinimapLayer();
+	const float TotalStaticRotation = MapRotationOffset + GetAlignmentAngle();
 
-	// --- LOGIC CẬP NHẬT ICON NGƯỜI CHƠI ---
-	// The player icon ALWAYS rotates based on the character's forward direction (ActorRotation).
-	if (PlayerIcon)
-	{
-		const float PlayerActorYaw = TrackedPawn->GetActorRotation().Yaw;
-		// The final icon angle is the actor's world yaw PLUS the map's base alignment rotation.
-		const float FinalIconYaw = PlayerActorYaw + GetAlignmentAngle();
-		PlayerIcon->SetRenderTransformAngle(FinalIconYaw);
-	}
-
-	// --- LOGIC CẬP NHẬT BẢN ĐỒ ---
-	if (CurrentLayer)
+	// --- MINIMAP LOGIC ---
+	if (CurrentLayer && MinimapMaterialInstance)
 	{
 		if (FVector2D PlayerUV; NavSubsystem->WorldToMapUV(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV))
 		{
-			// Update player's position on the map
-			MinimapMaterialInstance->SetVectorParameterValue("PlayerPositionUV", FLinearColor(PlayerUV.X, PlayerUV.Y, 0.0f, 0.0f));
+			MinimapMaterialInstance->SetVectorParameterValue("PlayerPositionUV",
+			                                                 FLinearColor(PlayerUV.X, PlayerUV.Y, 0.0f, 0.0f));
 
-
-			// If the map is set to rotate dynamically, calculate the yaw.
 			if (bShouldRotateMap)
 			{
-				// --- LOGIC CẬP NHẬT DYNAMIC ROTATION ---
-				float DynamicMapYaw = 0.0f; // Default to 0 (no dynamic rotation)
-
+				float DynamicMapYaw = 0.0f;
 				switch (RotationSource)
 				{
 				case EMinimapRotationSource::ControlRotation:
@@ -107,17 +105,89 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 					DynamicMapYaw = TrackedPawn->GetActorRotation().Yaw;
 					break;
 				}
-				
-				// The final dynamic rotation also needs to be aligned with the map's base.
-				const float FinalDynamicRotation = DynamicMapYaw + GetAlignmentAngle();
-				MinimapMaterialInstance->SetScalarParameterValue("PlayerYaw", FMath::DegreesToRadians(FinalDynamicRotation));
+				const float FinalDynamicRotation = DynamicMapYaw + TotalStaticRotation;
+				MinimapMaterialInstance->SetScalarParameterValue("PlayerYaw",
+				                                                 FMath::DegreesToRadians(FinalDynamicRotation));
 			}
 
-			// Always update zoom
 			MinimapMaterialInstance->SetScalarParameterValue("Zoom", Zoom);
 		}
 	}
+
+	// --- PLAYER ICON LOGIC ---
+	if (PlayerIcon)
+	{
+		const float FinalIconYaw = TrackedPawn->GetActorRotation().Yaw + TotalStaticRotation;
+		PlayerIcon->SetRenderTransformAngle(FinalIconYaw);
+	}
+
+	// --- COMPASS LOGIC ---
+	if (bIsCompassEnabled && CompassMarkerCanvas)
+	{
+		UpdateCompass(TrackedPawn, TotalStaticRotation);
+	}
 }
+
+void UOBMinimapWidget::UpdateCompass(const APawn* TrackedPawn, float InTotalStaticRotation)
+{
+	const FVector PawnLocation = TrackedPawn->GetActorLocation();
+	const FVector2D CanvasCenter = CompassMarkerCanvas->GetCachedGeometry().GetLocalSize() / 2.0f;
+
+	TSet<FGuid> VisibleMarkerIDs;
+
+	for (const UOBMapMarker* Marker : NavSubsystem->GetAllActiveMarkers())
+	{
+		if (!Marker || !Marker->ConfigAsset || !(Marker->ConfigAsset->VisibilityFilter & static_cast<uint8>(
+			EOBMarkerVisibility::Compass)))
+		{
+			continue;
+		}
+		
+		VisibleMarkerIDs.Add(Marker->MarkerID);
+
+		const FVector DirToMarkerWorld = (Marker->WorldLocation - PawnLocation).GetSafeNormal2D();
+		const float MarkerWorldYaw = FMath::RadiansToDegrees(FMath::Atan2(DirToMarkerWorld.Y, DirToMarkerWorld.X));
+		const float MarkerFinalAngle = MarkerWorldYaw + InTotalStaticRotation;
+
+		const float AngleRad = FMath::DegreesToRadians(MarkerFinalAngle);
+		const float PosX = CanvasCenter.X + CompassMarkerRadius * FMath::Cos(AngleRad);
+		const float PosY = CanvasCenter.Y + CompassMarkerRadius * FMath::Sin(AngleRad);
+
+		UImage* MarkerIcon = ActiveCompassMarkerWidgets.FindRef(Marker->MarkerID);
+		if (!MarkerIcon)
+		{
+			MarkerIcon = NewObject<UImage>(CompassMarkerCanvas);
+			MarkerIcon->SetBrushFromTexture(Marker->ConfigAsset->IconTexture);
+			MarkerIcon->SetDesiredSizeOverride(Marker->ConfigAsset->Size);
+			CompassMarkerCanvas->AddChild(MarkerIcon);
+			ActiveCompassMarkerWidgets.Add(Marker->MarkerID, MarkerIcon);
+		}
+
+		MarkerIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerIcon->Slot))
+		{
+			CanvasSlot->SetPosition(FVector2D(PosX - (Marker->ConfigAsset->Size.X / 2.0f),
+			                                  PosY - (Marker->ConfigAsset->Size.Y / 2.0f)));
+		}
+	}
+
+	// Remove widgets for markers that no longer exist
+	TArray<FGuid> MarkersToRemove;
+	for (const auto& Pair : ActiveCompassMarkerWidgets)
+	{
+		if (!VisibleMarkerIDs.Contains(Pair.Key))
+		{
+			Pair.Value->RemoveFromParent();
+			MarkersToRemove.Add(Pair.Key);
+		}
+	}
+	for (const FGuid& ID : MarkersToRemove)
+	{
+		ActiveCompassMarkerWidgets.Remove(ID);
+	}
+}
+
 
 void UOBMinimapWidget::OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer)
 {
@@ -128,13 +198,11 @@ void UOBMinimapWidget::OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer)
 
 	if (NewLayer && NewLayer->MapTexture)
 	{
-		// A new map is active, update the texture in our material
 		MinimapMaterialInstance->SetTextureParameterValue("MapTexture", NewLayer->MapTexture);
 		MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	else
 	{
-		// No valid map, hide the minimap image
 		MapImage->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
@@ -143,10 +211,10 @@ float UOBMinimapWidget::GetAlignmentAngle() const
 {
 	switch (MapAlignment)
 	{
-	case EMapAlignment::Forward_PlusX:   return 0.0f;
-	case EMapAlignment::Right_PlusY:     return 90.0f;
+	case EMapAlignment::Forward_PlusX: return 0.0f;
+	case EMapAlignment::Right_PlusY: return 90.0f;
 	case EMapAlignment::Backward_MinusX: return 180.0f;
-	case EMapAlignment::Left_MinusY:     return -90.0f;
-	default:                             return 0.0f;
+	case EMapAlignment::Left_MinusY: return -90.0f;
+	default: return 0.0f;
 	}
 }

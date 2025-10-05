@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/CanvasPanel.h"
 #include "OBMinimapWidget.generated.h"
 
 class UImage;
@@ -72,7 +73,7 @@ protected:
 	UFUNCTION()
 	void OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer);
 
-	// The UImage widget in our UMG designer that will display the map.
+	// --- MINIMAP WIDGETS ---
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> MapImage;
 
@@ -80,6 +81,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> PlayerIcon;
 
+	// --- COMPASS WIDGETS ---
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	TObjectPtr<UImage> CompassRingImage;
+	
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	TObjectPtr<UCanvasPanel> CompassMarkerCanvas;
+
+	// --- MINIMAP SETTINGS ---
 	// The desired zoom level for the minimap.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
 	float Zoom = 5.0f;
@@ -101,9 +110,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap Settings")
 	EMapAlignment MapAlignment = EMapAlignment::Forward_PlusX;
 
+	// --- COMPASS SETTINGS ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Compass Settings")
+	bool bIsCompassEnabled = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Compass Settings", meta = (EditCondition = "bIsCompassEnabled"))
+	float CompassMarkerRadius = 200.0f;
+
 private:
 
+	// Helper function to get the base rotation angle from the alignment enum.
 	float GetAlignmentAngle() const;
+
+	// Helper function to update the compass and its markers.
+	void UpdateCompass(const APawn* TrackedPawn, float InTotalStaticRotation);
 	
 	// Cached pointer to our subsystem for quick access
 	UPROPERTY(Transient)
@@ -112,4 +132,8 @@ private:
 	// The dynamic material instance we will control
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MinimapMaterialInstance;
+
+	// A map to keep track of active compass marker widgets to avoid recreating them.
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UImage>> ActiveCompassMarkerWidgets;
 };

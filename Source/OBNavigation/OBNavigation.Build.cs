@@ -25,7 +25,7 @@ public class OBNavigation : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+				"Core", "UMG",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
