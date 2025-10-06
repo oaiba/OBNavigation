@@ -62,7 +62,7 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 }
 
 FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig,
-                                                FName InLayerName, FVector InStaticLocation)
+                                                const FName InLayerName, const FVector InStaticLocation)
 {
 	// Ensure the config is valid before proceeding
 	if (!InConfig)
@@ -70,6 +70,12 @@ FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarke
 		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Failed to register marker: InConfig is null."), *GetName(),
 		       __FUNCTION__);
 		return FGuid(); // Return invalid Guid
+	}
+
+	if (InTrackedActor && TrackedActorToMarkerIDMap.Contains(InTrackedActor))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Actor '%s' already has a registered marker. Skipping."), *GetName(), __FUNCTION__, *InTrackedActor->GetName());
+		return TrackedActorToMarkerIDMap.FindRef(InTrackedActor);
 	}
 
 	// Create a new marker object
@@ -80,6 +86,11 @@ FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarke
 
 	// Add to our map and broadcast changes
 	ActiveMarkersMap.Add(NewGuid, NewMarker);
+	if (InTrackedActor)
+	{
+		TrackedActorToMarkerIDMap.Add(InTrackedActor, NewGuid);
+	}
+
 	RebuildActiveMarkersArray();
 	OnMarkersUpdated.Broadcast();
 
@@ -98,9 +109,19 @@ void UOBNavigationSubsystem::UnregisterMapMarker(const FGuid& MarkerID)
 		return;
 	}
 
+	// Tìm marker trước khi xóa
+	if (const auto FoundMarkerPtr = ActiveMarkersMap.Find(MarkerID))
+	{
+		if (const UOBMapMarker* MarkerToRemove = *FoundMarkerPtr; MarkerToRemove && MarkerToRemove->TrackedActor.IsValid())
+		{
+			// Xóa khỏi map tra cứu ngược
+			TrackedActorToMarkerIDMap.Remove(MarkerToRemove->TrackedActor.Get());
+		}
+	}
+
 	if (ActiveMarkersMap.Remove(MarkerID) > 0)
 	{
-		// If removal was successful, update the cached array and notify UI
+		// If removal was successful, update the cached array and notify the UI
 		RebuildActiveMarkersArray();
 		OnMarkersUpdated.Broadcast();
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Unregistered marker with ID: %s"), *GetName(), __FUNCTION__,
@@ -111,6 +132,15 @@ void UOBNavigationSubsystem::UnregisterMapMarker(const FGuid& MarkerID)
 		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Could not find marker with ID to unregister: %s"), *GetName(),
 		       __FUNCTION__, *MarkerID.ToString());
 	}
+}
+
+FGuid UOBNavigationSubsystem::GetMarkerIDForActor(AActor* InActor) const
+{
+	if (InActor)
+	{
+		return TrackedActorToMarkerIDMap.FindRef(InActor);
+	}
+	return FGuid();
 }
 
 void UOBNavigationSubsystem::RebuildActiveMarkersArray()
@@ -154,25 +184,48 @@ bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, cons
 	// We flip it so North (+X) is at the top of the map (V=0).
 	OutMapUV.Y = 1.0 - (LocalX / WorldSize.X);
 
-	// --- DEBUG LOG ---
-	if (GEngine)
-	{
-		const FString DebugMsg = FString::Printf(TEXT("[WorldToMapUV] WorldLoc: %s -> UV: %s"), *WorldLocation.ToString(), *OutMapUV.ToString());
-		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Green, DebugMsg);
-	}
-	
+	// // --- DEBUG LOG ---
+	// if (GEngine)
+	// {
+	// 	const FString DebugMsg = FString::Printf(
+	// 		TEXT("[WorldToMapUV] WorldLoc: %s -> UV: %s"), *WorldLocation.ToString(), *OutMapUV.ToString());
+	// 	GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Green, DebugMsg);
+	// }
+
 	return true;
 }
 
 bool UOBNavigationSubsystem::Tick(float DeltaTime)
 {
-	// Only run logic if we are tracking a valid pawn
-	if (TrackedPlayerPawn.IsValid())
+	// Get the world context
+	const UWorld* MyWorld = GetWorld();
+	if (!MyWorld)
 	{
-		UpdateActiveMinimapLayer();
+		return true; // Cannot proceed without a world, but keep the ticker alive
 	}
-	// Return true to keep the ticker registered
-	return true;
+
+	// Get the current network mode
+
+	// Update the active layer based on the tracked pawn.
+	// This is purely client-side visual logic and should not run on a dedicated server.
+	// It will run on NM_Client (a client connected to a dedicated server)
+	// and NM_ListenServer (the server that is also a player).
+	// NM_Standalone is also effectively a client.
+	if (const ENetMode NetMode = MyWorld->GetNetMode(); NetMode != NM_DedicatedServer)
+	{
+		if (TrackedPlayerPawn.IsValid())
+		{
+			UpdateActiveMinimapLayer();
+		}
+	}
+
+	// Update all registered markers (position, lifetime, etc.).
+	// This needs to run on all instances:
+	// - Clients need it to update visual positions.
+	// - Server needs it to manage authoritative markers (like Ping lifetime).
+	UpdateAllMarkers(DeltaTime);
+
+	return true; // Keep the ticker registered
 }
 
 void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
@@ -202,5 +255,70 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Minimap layer changed to: %s"), *GetName(), __FUNCTION__,
 		       BestLayer ? *BestLayer->GetName() : TEXT("None"));
 		OnMinimapLayerChanged.Broadcast(CurrentMinimapLayer);
+	}
+}
+
+void UOBNavigationSubsystem::UpdateAllMarkers(const float DeltaTime)
+{
+	// A list to store IDs of markers that need to be removed (e.g., expired lifetime)
+	TArray<FGuid> MarkersToRemove;
+
+	// Iterate through all active markers using the TMap for efficiency
+	for (auto& Pair : ActiveMarkersMap)
+	{
+		UOBMapMarker* Marker = Pair.Value;
+		if (!Marker)
+		{
+			// This case should be rare but good to handle. Mark for removal.
+			MarkersToRemove.Add(Pair.Key);
+			continue;
+		}
+
+		// --- 1. Update Position ---
+		// Call the marker's own update logic.
+		Marker->UpdateLocation();
+
+		// --- 2. Update Lifetime ---
+		// If the marker has a limited lifetime (e.g., Pings)
+		if (Marker->CurrentLifeTime > 0.0f)
+		{
+			Marker->CurrentLifeTime -= DeltaTime;
+			if (Marker->CurrentLifeTime <= 0.0f)
+			{
+				// Mark for removal if lifetime has expired
+				MarkersToRemove.Add(Pair.Key);
+			}
+		}
+
+		// --- 3. (Optional) Check for invalid tracked actors ---
+		// If a marker is tracking an actor that has been destroyed.
+		if (Marker->TrackedActor.IsStale() && !Marker->TrackedActor.IsValid())
+		{
+			// Depending on the design, you might want to remove the marker or keep it at its last known location.
+			// For now, let's remove it.
+			UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Tracked actor for marker %s is stale. Removing marker."), *GetName(),
+			       __FUNCTION__, *Marker->MarkerID.ToString());
+			MarkersToRemove.Add(Pair.Key);
+		}
+	}
+
+	// --- Cleanup ---
+	// Remove all markers that were marked for removal in a single batch operation.
+	// This is safer than removing them during the loop.
+	if (!MarkersToRemove.IsEmpty())
+	{
+		for (const FGuid& MarkerID : MarkersToRemove)
+		{
+			// Use the existing Unregister function, but we can optimize by not broadcasting for every single one.
+			if (ActiveMarkersMap.Remove(MarkerID) > 0)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Automatically unregistered marker with ID: %s"), *GetName(),
+				       __FUNCTION__, *MarkerID.ToString());
+			}
+		}
+
+		// After removing, rebuild the array and broadcast a single update.
+		RebuildActiveMarkersArray();
+		OnMarkersUpdated.Broadcast();
 	}
 }

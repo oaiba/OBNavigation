@@ -6,17 +6,25 @@
 #include "UObject/Object.h"
 #include "OBMapMarker.generated.h"
 
-// Enum to define where a marker can be displayed
-UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMasksInEditor = "true"))
-enum class EOBMarkerVisibility : uint8
+/**
+ * @struct FMarkerVisibilityOptions
+ * @brief A struct to clearly define where a marker should be visible.
+ * This replaces the enum bitmask for better stability and readability.
+ */
+USTRUCT(BlueprintType)
+struct FMarkerVisibilityOptions
 {
-	None = 0 UMETA(Hidden),
-	Minimap = 1 << 0,
-	FullMap = 1 << 1,
-	Compass = 1 << 2,
-};
+	GENERATED_BODY()
 
-ENUM_CLASS_FLAGS(EOBMarkerVisibility);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visibility")
+	bool bShowOnMinimap = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visibility")
+	bool bShowOnFullMap = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visibility")
+	bool bShowOnCompass = false;
+};
 
 UCLASS(BlueprintType)
 class OBNAVIGATION_API UOBMarkerConfigAsset : public UDataAsset
@@ -24,8 +32,21 @@ class OBNAVIGATION_API UOBMarkerConfigAsset : public UDataAsset
 	GENERATED_BODY()
 
 public:
+
+	// The icon that identifies the object (e.g., a quest exclamation mark, a player number).
+	// This part will NOT rotate.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
-	TObjectPtr<UTexture2D> IconTexture;
+	TObjectPtr<UTexture2D> IdentifierIconTexture;
+
+	// The icon that indicates the direction (e.g., an arrow, a cone).
+	// This part WILL rotate. If null, no directional indicator will be shown.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
+	TObjectPtr<UTexture2D> DirectionalIndicatorTexture;
+	
+	// The pivot point for the Directional Indicator's rotation, in normalized 0-1 space.
+	// (0.5, 0.5) is the center. (0.5, 0.0) is the top-center edge.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
+	FVector2D IndicatorPivot = FVector2D(0.5f, 0.5f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
 	FVector2D Size = FVector2D(32.f, 32.f);
@@ -33,10 +54,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
 	FLinearColor Color = FLinearColor::White;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config",
-		meta=(Bitmask, BitmaskEnum = "/Script/OBNavigation.EOBMarkerVisibility"))
-	uint8 VisibilityFilter;
-
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
+	FMarkerVisibilityOptions Visibility;
+	
 	// Optional: For markers that should disappear after a duration (like pings)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
 	float LifeTime = 0.0f; // 0.0 means infinite
@@ -73,7 +93,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category="Marker")
 	FName MarkerLayerName;
 
-	// Remaining life time for temporary markers (e.g., pings)
+	// Remaining lifetime for temporary markers (e.g., pings)
 	UPROPERTY(BlueprintReadOnly, Category="Marker")
 	float CurrentLifeTime;
 
@@ -84,6 +104,4 @@ public:
 	// Updates the marker's world location (if tracking an actor)
 	void UpdateLocation();
 
-	// Checks if this marker should be visible on a specific view
-	bool IsVisibleOn(EOBMarkerVisibility ViewType) const;
 };

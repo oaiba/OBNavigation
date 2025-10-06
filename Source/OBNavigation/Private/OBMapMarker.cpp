@@ -42,13 +42,3 @@ void UOBMapMarker::UpdateLocation()
 		WorldLocation = TrackedActor->GetActorLocation();
 	}
 }
-
-bool UOBMapMarker::IsVisibleOn(EOBMarkerVisibility ViewType) const
-{
-	if (!ConfigAsset)
-	{
-		return false;
-	}
-	// Use bitwise AND to check if the flag for the view type is set in the visibility filter
-	return (ConfigAsset->VisibilityFilter & static_cast<uint8>(ViewType)) != 0;
-}

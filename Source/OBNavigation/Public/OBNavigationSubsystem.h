@@ -38,6 +38,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "OBNavigation")
 	APawn* GetTrackedPlayerPawn() const { return TrackedPlayerPawn.Get(); }
 
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
+	FGuid GetMarkerIDForActor(AActor* InActor) const;
+
 	/**
 	 * @brief Registers a new marker.
 	 * @param InTrackedActor The actor to track. If nullptr, use InStaticLocation.
@@ -76,6 +79,7 @@ protected:
 
 private:
 	void UpdateActiveMinimapLayer();
+	void UpdateAllMarkers(float DeltaTime);
 
 	// All available map layer assets loaded at initialization
 	UPROPERTY()
@@ -101,4 +105,8 @@ private:
 	FTSTicker::FDelegateHandle TickerHandle;
 
 	void RebuildActiveMarkersArray(); // Helper to update ActiveMarkers array
+
+	// Reverse lookup map to quickly find a marker's ID from the actor it tracks.
+	UPROPERTY()
+	TMap<TObjectPtr<AActor>, FGuid> TrackedActorToMarkerIDMap;
 };

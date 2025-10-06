@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "OBMapMarker.h"
 #include "Engine/DataAsset.h"
 #include "OBMinimapConfigAsset.generated.h"
 
@@ -71,7 +72,7 @@ public:
 
 	// The texture for the player's icon in the center of the minimap.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Assets")
-	TObjectPtr<UTexture2D> PlayerIconTexture;
+	TObjectPtr<UOBMarkerConfigAsset> PlayerMarkerConfig;
 
 	// The texture for the compass ring that surrounds the minimap.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Assets")

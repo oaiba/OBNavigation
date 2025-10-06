@@ -6,6 +6,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/CanvasPanel.h"
 #include "Data/OBMinimapConfigAsset.h"
+#include "Widget/OBMapMarkerWidget.h"
 #include "OBMinimapWidget.generated.h"
 
 class UImage;
@@ -63,8 +64,15 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> MapImage;
 
+	// UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	// TObjectPtr<UImage> PlayerIcon;
+
+	// --- CONFIGURATION ---
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UImage> PlayerIcon;
+	TObjectPtr<UCanvasPanel> MinimapMarkerCanvas;
+	
+	UPROPERTY(EditAnywhere, Category = "Config")
+	TSubclassOf<UOBMapMarkerWidget> MarkerWidgetClass;
 
 	// --- COMPASS WIDGETS ---
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
@@ -79,7 +87,9 @@ private:
 
 	// Helper function to update the compass and its markers.
 	void UpdateCompassMarkers(const APawn* TrackedPawn, float InTotalStaticRotation);
+	void UpdateMinimapMarkers(const APawn* TrackedPawn, float InTotalStaticRotation);
 
+	// --- CACHED POINTERS ---
 	// Cached pointer to our subsystem for quick access
 	UPROPERTY(Transient)
 	TObjectPtr<UOBNavigationSubsystem> NavSubsystem;
@@ -88,10 +98,13 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MinimapMaterialInstance;
 
-	// A map to keep track of active compass marker widgets to avoid recreating them.
+	// Widget Pools
 	UPROPERTY(Transient)
-	TMap<FGuid, TObjectPtr<UImage>> ActiveCompassMarkerWidgets;
-
+	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveMinimapMarkerWidgets;
+	
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveCompassMarkerWidgets;
+	
 	// --- CONFIGURATION ---
 	// Configuration asset for visual resources. Set via InitializeAndStartTracking.
 	UPROPERTY(Transient)
@@ -104,4 +117,7 @@ private:
 	// This allows runtime changes (like SetMapRotationOffset) without modifying the asset
 	float CurrentMapRotationOffset = 0.0f;
 	EMinimapShape CurrentMinimapShape = EMinimapShape::Square;
+
+	FGuid PlayerMarkerID; // Store the player's own marker ID
+
 };
