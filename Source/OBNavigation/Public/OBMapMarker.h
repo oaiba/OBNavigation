@@ -51,7 +51,7 @@ public:
 	// The icon that indicates the direction (e.g., an arrow, a cone).
 	// This part WILL rotate. If null, no directional indicator will be shown.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
-	TObjectPtr<UTexture2D> DirectionalIndicatorTexture;
+	TObjectPtr<UMaterialInterface> IndicatorMaterial;
 
 	// The pivot point for the Directional Indicator's rotation, in normalized 0-1 space.
 	// (0.5, 0.5) is the center. (0.5, 0.0) is the top-center edge.

@@ -260,7 +260,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			ActiveMinimapMarkerWidgets.Add(Marker->MarkerID, MarkerWidget);
 
 			MarkerWidget->InitializeMarker(Marker->ConfigAsset->IdentifierIconTexture,
-			                               Marker->ConfigAsset->DirectionalIndicatorTexture);
+			                               Marker->ConfigAsset->IndicatorMaterial);
 		}
 
 		// --- START: REPLACEMENT LOGIC FOR POSITION AND ROTATION ---
@@ -360,7 +360,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 		}
 		// --- END: REPLACEMENT LOGIC ---
 
-		MarkerWidget->UpdateRotation(IndicatorAngle);
+		MarkerWidget->UpdateVisuals(IndicatorAngle, 90.0f, 1.0f);
 
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
 		{
@@ -370,7 +370,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			// This ensures the pivot calculations are based on our intended dimensions.
 			const FVector2D MarkerSize = Marker->ConfigAsset->Size;
 			FVector2D SlotPosition;
-			
+
 			if (Marker->MarkerID == PlayerMarkerID)
 			{
 				SlotPosition = FinalPosition;
@@ -389,7 +389,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			CanvasSlot->SetSize(MarkerSize);
 			CanvasSlot->SetPosition(SlotPosition);
 			CanvasSlot->SetZOrder(Marker->MarkerID == PlayerMarkerID ? 10 : 1);
-			
+
 			// --- FIX ENDS HERE ---
 		}
 

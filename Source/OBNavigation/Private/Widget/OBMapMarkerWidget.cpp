@@ -5,20 +5,23 @@
 
 #include "Components/Image.h"
 
-void UOBMapMarkerWidget::InitializeMarker(UTexture2D* IdentifierTexture, UTexture2D* IndicatorTexture)
+void UOBMapMarkerWidget::InitializeMarker(UTexture2D* IdentifierTexture, UMaterialInterface* IndicatorMaterial)
 {
 	// Set the static identifier icon's texture and visibility
 	if (IdentifierIcon)
 	{
 		IdentifierIcon->SetBrushFromTexture(IdentifierTexture);
-		IdentifierIcon->SetVisibility(IdentifierTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		IdentifierIcon->SetVisibility(IdentifierTexture
+			                              ? ESlateVisibility::HitTestInvisible
+			                              : ESlateVisibility::Collapsed);
 	}
-	
-	// Set the directional indicator's texture and visibility
-	if (DirectionalIndicator)
+
+	if (DirectionalIndicator && IndicatorMaterial)
 	{
-		DirectionalIndicator->SetBrushFromTexture(IndicatorTexture);
-		DirectionalIndicator->SetVisibility(IndicatorTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		// Create a dynamic instance from the provided base material
+		FOVMaterialInstance = UMaterialInstanceDynamic::Create(IndicatorMaterial, this);
+		DirectionalIndicator->SetBrushFromMaterial(FOVMaterialInstance);
+		DirectionalIndicator->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 }
 
@@ -28,6 +31,22 @@ void UOBMapMarkerWidget::UpdateRotation(const float IndicatorAngle)
 	if (DirectionalIndicator)
 	{
 		DirectionalIndicator->SetRenderTransformAngle(IndicatorAngle);
+	}
+}
+
+void UOBMapMarkerWidget::UpdateVisuals(const float IndicatorAngle, const float InViewAngle, const float InViewDistance)
+{
+	if (DirectionalIndicator)
+	{
+		// Update the rotation of the entire image widget
+		DirectionalIndicator->SetRenderTransformAngle(IndicatorAngle);
+	}
+
+	if (FOVMaterialInstance)
+	{
+		// Update the parameters INSIDE the material
+		FOVMaterialInstance->SetScalarParameterValue("ViewAngle", InViewAngle);
+		FOVMaterialInstance->SetScalarParameterValue("ViewDistance", InViewDistance);
 	}
 }
 

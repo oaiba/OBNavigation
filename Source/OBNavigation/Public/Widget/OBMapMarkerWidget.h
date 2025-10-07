@@ -24,10 +24,10 @@ public:
 	 * @brief Sets up the static visual properties of the marker.
 	 * Call this ONLY ONCE when the widget is created.
 	 * @param IdentifierTexture The texture for the non-rotating identifier icon.
-	 * @param IndicatorTexture The texture for the rotating directional indicator. Can be null.
+	 * @param IndicatorMaterial The material for the rotating directional indicator. Can be null.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Map Marker")
-	void InitializeMarker(UTexture2D* IdentifierTexture, UTexture2D* IndicatorTexture);
+	void InitializeMarker(UTexture2D* IdentifierTexture, UMaterialInterface* IndicatorMaterial);
 
 	/**
 	 * @brief Updates the dynamic properties of the marker, like rotation.
@@ -36,6 +36,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Map Marker")
 	void UpdateRotation(float IndicatorAngle);
+
+	/**
+	 * @brief Updates the dynamic properties of the marker.
+	 * @param IndicatorAngle The new rotation angle (in degrees).
+	 * @param InViewAngle The FOV angle for the cone material.
+	 * @param InViewDistance The normalized view distance for the cone.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Map Marker")
+	void UpdateVisuals(float IndicatorAngle, float InViewAngle, float InViewDistance);
+
 
 protected:
 	// This function is called when the widget is constructed in the game.
@@ -55,4 +65,8 @@ protected:
 	 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> DirectionalIndicator;
+
+	// Dynamic material instance for the FOV cone here
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> FOVMaterialInstance;
 };
