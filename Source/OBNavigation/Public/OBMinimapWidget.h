@@ -84,10 +84,10 @@ protected:
 private:
 	// Helper function to get the base rotation angle from the alignment enum.
 	float GetAlignmentAngle() const;
-
+	float GetCompassRadius() const;
 	// Helper function to update the compass and its markers.
-	void UpdateCompassMarkers(const APawn* TrackedPawn, float InTotalStaticRotation);
-	void UpdateMinimapMarkers(const APawn* TrackedPawn, float InTotalStaticRotation);
+	void UpdateCompassMarkers(const APawn* TrackedPawn, float InTotalStaticRotation, TSet<FGuid>& OutHandledMarkerIDs);
+	void UpdateMinimapMarkers(const APawn* TrackedPawn, float InTotalStaticRotation, TSet<FGuid>& OutHandledMarkerIDs);
 
 	// --- CACHED POINTERS ---
 	// Cached pointer to our subsystem for quick access
@@ -98,12 +98,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MinimapMaterialInstance;
 
-	// Widget Pools
+	// --- UNIFIED WIDGET POOL ---
+	// A single map to hold all active marker widgets, regardless of where they are displayed.
 	UPROPERTY(Transient)
-	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveMinimapMarkerWidgets;
-	
-	UPROPERTY(Transient)
-	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveCompassMarkerWidgets;
+	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveMarkerWidgets; 
 	
 	// --- CONFIGURATION ---
 	// Configuration asset for visual resources. Set via InitializeAndStartTracking.

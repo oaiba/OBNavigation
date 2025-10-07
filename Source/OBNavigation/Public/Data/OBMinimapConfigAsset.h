@@ -99,13 +99,11 @@ public:
 	EMinimapShape MinimapShape = EMinimapShape::Circle;
 
 	// --- COMPASS SETTINGS ---
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Compass Settings")
-	bool bIsCompassEnabled = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Compass Settings",
-		meta = (EditCondition = "bIsCompassEnabled"))
-	float CompassMarkerRadius = 200.0f;
-
+	
+	// The padding (in pixels) between the edge of the minimap and the compass marker ring.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Compass Settings", meta = (ClampMin = "0.0"))
+	float CompassPadding = 1.0f;
+	
 	// --- DEBUG SETTINGS ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug Settings")
 	bool bShowDebugMessages = false;
