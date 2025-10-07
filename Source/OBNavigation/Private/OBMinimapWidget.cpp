@@ -248,7 +248,15 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 		{
 			MarkerWidget = CreateWidget<UOBMapMarkerWidget>(this, MarkerWidgetClass);
 			if (!MarkerWidget) continue;
-			MinimapMarkerCanvas->AddChild(MarkerWidget);
+			// Thêm widget vào canvas
+
+			// --- FIX PART 1: FORCE CENTER ALIGNMENT ---
+			// Set the alignment to (0.5, 0.5) to ensure the widget's pivot/anchor is its center.
+			// This makes positioning logic consistent and independent of Blueprint settings.
+			if (auto* NewSlot = Cast<UCanvasPanelSlot>(MinimapMarkerCanvas->AddChild(MarkerWidget)))
+			{
+				NewSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			}
 			ActiveMinimapMarkerWidgets.Add(Marker->MarkerID, MarkerWidget);
 
 			MarkerWidget->InitializeMarker(Marker->ConfigAsset->IdentifierIconTexture,
@@ -320,15 +328,25 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
 		{
-			// Áp dụng logic bù trừ pivot
-			const FVector2D MarkerSize = MarkerWidget->GetDesiredSize();
-			const FVector2D Pivot = Marker->ConfigAsset->IndicatorPivot;
-			const FVector2D PivotOffset = (Pivot - FVector2D(0.5f, 0.5f)) * MarkerSize;
-			const FVector2D RotatedPivotOffset = PivotOffset.GetRotated(IndicatorAngle);
-			const FVector2D SlotPosition = FinalPosition - (MarkerSize / 2.0f) - (RotatedPivotOffset - PivotOffset);
+			FVector2D SlotPosition;
+			if (Marker->MarkerID == PlayerMarkerID)
+			{
+				// FOR THE PLAYER: The position is simply the center of the canvas.
+				SlotPosition = FinalPosition;
+			}
+			else
+			{
+				// FOR OTHER MARKERS: We still need pivot compensation, but without the half-size offset.
+				const FVector2D MarkerSize = MarkerWidget->GetDesiredSize();
+				const FVector2D Pivot = Marker->ConfigAsset->IndicatorPivot;
+				const FVector2D PivotOffset = (Pivot - FVector2D(0.5f, 0.5f)) * MarkerSize;
+				const FVector2D RotatedPivotOffset = PivotOffset.GetRotated(IndicatorAngle);
+				SlotPosition = FinalPosition - (RotatedPivotOffset - PivotOffset);
+			}
 
 			CanvasSlot->SetPosition(SlotPosition);
 			CanvasSlot->SetZOrder(Marker->MarkerID == PlayerMarkerID ? 10 : 1);
+			// --- FIX ENDS HERE ---
 		}
 
 		if (GEngine && ConfigAsset->bShowDebugMessages)
