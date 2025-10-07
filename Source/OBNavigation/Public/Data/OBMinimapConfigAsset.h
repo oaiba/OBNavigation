@@ -100,10 +100,10 @@ public:
 
 	// --- COMPASS SETTINGS ---
 	
-	// The padding (in pixels) between the edge of the minimap and the compass marker ring.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Compass Settings", meta = (ClampMin = "0.0"))
-	float CompassPadding = 1.0f;
-	
+	// // The padding (in pixels) between the edge of the minimap and the compass marker ring.
+	// UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Compass Settings", meta = (ClampMin = "0.0"))
+	// float CompassPadding = 1.0f;
+
 	// --- DEBUG SETTINGS ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug Settings")
 	bool bShowDebugMessages = false;

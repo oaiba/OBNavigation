@@ -167,16 +167,10 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		UpdateMinimapMarkers(TrackedPawn, TotalStaticRotation, HandledMarkerIDs);
 	}
 
-	// --- Pass 2: COMPASS MARKERS ---
-	if (CompassMarkerCanvas)
-	{
-		UpdateCompassMarkers(TrackedPawn, TotalStaticRotation, HandledMarkerIDs);
-	}
-
 	// --- Pass 3: CLEANUP UNUSED WIDGETS ---
 	// Remove any widget from the pool that wasn't handled in either pass
 	TArray<FGuid> MarkersToRemove;
-	for (const auto& Pair : ActiveMarkerWidgets)
+	for (const auto& Pair : ActiveMinimapMarkerWidgets)
 	{
 		if (!HandledMarkerIDs.Contains(Pair.Key))
 		{
@@ -186,11 +180,11 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 
 	for (const FGuid& ID : MarkersToRemove)
 	{
-		if (UOBMapMarkerWidget* WidgetToRemove = ActiveMarkerWidgets.FindRef(ID))
+		if (UOBMapMarkerWidget* WidgetToRemove = ActiveMinimapMarkerWidgets.FindRef(ID))
 		{
 			WidgetToRemove->RemoveFromParent();
 		}
-		ActiveMarkerWidgets.Remove(ID);
+		ActiveMinimapMarkerWidgets.Remove(ID);
 	}
 
 	// --- DEBUG LOGS (Sửa lại) ---
@@ -222,233 +216,118 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	}
 }
 
-void UOBMinimapWidget::UpdateCompassMarkers(const APawn* TrackedPawn, const float InTotalStaticRotation,
-                                            TSet<FGuid>& OutHandledMarkerIDs)
-{
-	const FVector PawnLocation = TrackedPawn->GetActorLocation();
-	const FVector2D CanvasCenter = CompassMarkerCanvas->GetCachedGeometry().GetLocalSize() / 2.0f;
-	const float CurrentCompassRadius = GetCompassRadius();
-
-	TSet<FGuid> VisibleMarkerIDs;
-
-	for (const UOBMapMarker* Marker : NavSubsystem->GetAllActiveMarkers())
-	{
-		if (!Marker || !Marker->ConfigAsset || !Marker->ConfigAsset->Visibility.bShowOnCompass)
-		{
-			continue;
-		}
-		
-		OutHandledMarkerIDs.Add(Marker->MarkerID); // Mark this ID as handled
-		VisibleMarkerIDs.Add(Marker->MarkerID);
-
-		const FVector DirToMarkerWorld = (Marker->WorldLocation - PawnLocation).GetSafeNormal2D();
-		const float MarkerWorldYaw = FMath::RadiansToDegrees(FMath::Atan2(DirToMarkerWorld.Y, DirToMarkerWorld.X));
-		const float MarkerFinalAngle = MarkerWorldYaw + InTotalStaticRotation;
-
-		const float AngleRad = FMath::DegreesToRadians(MarkerFinalAngle);
-		const float PosX = CanvasCenter.X + CurrentCompassRadius * FMath::Cos(AngleRad);
-		const float PosY = CanvasCenter.Y + CurrentCompassRadius * FMath::Sin(AngleRad);
-
-		UOBMapMarkerWidget* MarkerWidget = ActiveMarkerWidgets.FindRef(Marker->MarkerID);
-		if (!MarkerWidget)
-		{
-			MarkerWidget = CreateWidget<UOBMapMarkerWidget>(this, MarkerWidgetClass);
-			if (!MarkerWidget) continue;
-
-			// Add to the correct canvas
-			CompassMarkerCanvas->AddChild(MarkerWidget);
-			ActiveMarkerWidgets.Add(Marker->MarkerID, MarkerWidget);
-		}
-
-		// Ensure it's in the correct canvas
-		if (MarkerWidget->GetParent() != CompassMarkerCanvas)
-		{
-			MarkerWidget->RemoveFromParent();
-			CompassMarkerCanvas->AddChild(MarkerWidget);
-		}
-
-		MarkerWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-
-		MarkerWidget->UpdateMarkerVisuals(Marker->ConfigAsset->IdentifierIconTexture, nullptr, 0.0f);		
-
-		// --- LOGIC BÙ TRỪ PIVOT MỚI (CHO LA BÀN) ---
-		// Vì indicator trên la bàn không xoay, chúng ta không cần bù trừ phức tạp.
-		// Chúng ta chỉ cần định vị widget sao cho điểm pivot của nó nằm trên vòng tròn la bàn.
-		const FVector2D MarkerSize = Marker->ConfigAsset->Size;
-		const FVector2D Pivot = Marker->ConfigAsset->IndicatorPivot;
-
-		// Calculate the offset from the top-left corner to the pivot point.
-		const FVector2D PivotOffsetInPixels = Pivot * MarkerSize;
-		const FVector2D CenterPositionOnRing = FVector2D(PosX, PosY); // Vị trí tâm mong muốn
-
-		// The final slot position is the target point on the ring, minus the pivot offset.
-		const FVector2D SlotPosition = CenterPositionOnRing - PivotOffsetInPixels;
-
-		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
-		{
-			CanvasSlot->SetPosition(SlotPosition);
-		}
-	}
-}
-
 void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const float InTotalStaticRotation,
                                             TSet<FGuid>& OutHandledMarkerIDs)
 {
 	if (!MarkerWidgetClass || !NavSubsystem || !ConfigAsset) return;
 
-	if (GEngine && ConfigAsset->bShowDebugMessages)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1, 0.0f, FColor::Red,
-			FString::Printf(
-				TEXT("UpdateMinimapMarkers: Found %d total markers in Subsystem."),
-				NavSubsystem->GetAllActiveMarkers().Num())
-		);
-	}
-
 	const UOBMapLayerAsset* CurrentLayer = NavSubsystem->GetCurrentMinimapLayer();
-
-	if (GEngine && ConfigAsset->bShowDebugMessages)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1, 0.0f, FColor::Orange,
-			FString::Printf(TEXT("Current Map Layer: %s"), CurrentLayer ? *CurrentLayer->GetName() : TEXT("NULL"))
-		);
-	}
-
 	if (!CurrentLayer) return;
 
 	const FVector2D CanvasSize = MinimapMarkerCanvas->GetCachedGeometry().GetLocalSize();
 	const FVector2D CanvasCenter = CanvasSize / 2.0f;
-	TSet<FGuid> VisibleMarkerIDs;
+	// Bán kính của minimap (giả sử nó vừa vặn với canvas)
+	const float MinimapRadius = FMath::Min(CanvasCenter.X, CanvasCenter.Y);
 
 	FVector2D PlayerUV;
-	if (!NavSubsystem->WorldToMapUV(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV))
-	{
-		return;
-	}
+	NavSubsystem->WorldToMapUV(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV);
 
-	for (const UOBMapMarker* Marker : NavSubsystem->GetAllActiveMarkers())
+	for (UOBMapMarker* Marker : NavSubsystem->GetAllActiveMarkers())
 	{
+		// SỬA LẠI ĐIỀU KIỆN LỌC: BÂY GIỜ CHỈ CẦN LỌC MINIMAP
 		if (!Marker || !Marker->ConfigAsset || !Marker->ConfigAsset->Visibility.bShowOnMinimap)
 		{
-			if (GEngine && ConfigAsset->bShowDebugMessages)
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Red,
-				                                 FString::Printf(
-					                                 TEXT(
-						                                 "Marker [%s] SKIPPED: Visibility Filter does not include Minimap."),
-					                                 *Marker->MarkerID.ToString().Left(8)));
-			}
 			continue;
 		}
-		OutHandledMarkerIDs.Add(Marker->MarkerID); // Mark this ID as handled
 
-		VisibleMarkerIDs.Add(Marker->MarkerID);
+		OutHandledMarkerIDs.Add(Marker->MarkerID);
+
+		// --- LOGIC TẠO/LẤY WIDGET (giữ nguyên từ trước) ---
+		UOBMapMarkerWidget* MarkerWidget = ActiveMinimapMarkerWidgets.FindRef(Marker->MarkerID);
+		if (!MarkerWidget)
+		{
+			MarkerWidget = CreateWidget<UOBMapMarkerWidget>(this, MarkerWidgetClass);
+			if (!MarkerWidget) continue;
+			MinimapMarkerCanvas->AddChild(MarkerWidget);
+			ActiveMinimapMarkerWidgets.Add(Marker->MarkerID, MarkerWidget);
+
+			MarkerWidget->InitializeMarker(Marker->ConfigAsset->IdentifierIconTexture,
+			                               Marker->ConfigAsset->DirectionalIndicatorTexture);
+		}
 
 		FVector2D FinalPosition;
+		float IndicatorAngle = 0.0f;
 
+		// --- LOGIC VỊ TRÍ VÀ XOAY MỚI ---
 		if (Marker->MarkerID == PlayerMarkerID)
 		{
+			// Người chơi luôn ở giữa
 			FinalPosition = CanvasCenter;
-			if (GEngine && ConfigAsset->bShowDebugMessages)
-			{
-				GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Red,
-				                                 FString::Printf(
-					                                 TEXT("Player Marker: %s"), *Marker->MarkerID.ToString().Left(8)));
-			}
+			IndicatorAngle = TrackedPawn->GetActorRotation().Yaw + InTotalStaticRotation;
 		}
 		else
 		{
 			FVector2D MarkerUV;
-			if (!NavSubsystem->WorldToMapUV(CurrentLayer, Marker->WorldLocation, MarkerUV))
-			{
-				if (GEngine && ConfigAsset->bShowDebugMessages)
-				{
-					GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Red,
-					                                 FString::Printf(
-						                                 TEXT(
-							                                 "Marker [%s] SKIPPED: WorldToMapUV returned false (Out of Bounds?). WorldLoc: %s"),
-						                                 *Marker->MarkerID.ToString().Left(8),
-						                                 *Marker->WorldLocation.ToString()));
-				}
-				continue;
-			}
+			NavSubsystem->WorldToMapUV(CurrentLayer, Marker->WorldLocation, MarkerUV);
 
 			const FVector2D UVDifference = MarkerUV - PlayerUV;
-			const FVector2D PixelOffset = UVDifference * CanvasSize * ConfigAsset->Zoom;
+			FVector2D PixelOffset = UVDifference * CanvasSize * ConfigAsset->Zoom;
 
-			// Phép xoay chỉ nên áp dụng khi bản đồ tĩnh, vì khi bản đồ động, hệ quy chiếu đã xoay theo người chơi.
+			// Áp dụng xoay cho offset
 			FVector2D RotatedPixelOffset;
 			if (ConfigAsset->bShouldRotateMap)
 			{
-				// Khi bản đồ xoay, các marker cũng cần xoay tương đối với nó.
-				// Phép xoay này bù lại phép xoay ngược của material.
 				float DynamicMapYaw = 0.0f;
+				// Lấy DynamicMapYaw tương tự như trong NativeTick
 				switch (ConfigAsset->RotationSource)
 				{
-				case EMinimapRotationSource::ControlRotation: DynamicMapYaw = TrackedPawn->GetControlRotation().Yaw;
+				case EMinimapRotationSource::ControlRotation:
+					DynamicMapYaw = TrackedPawn->GetControlRotation().Yaw;
 					break;
-				case EMinimapRotationSource::ActorRotation: DynamicMapYaw = TrackedPawn->GetActorRotation().Yaw;
+				case EMinimapRotationSource::ActorRotation:
+					DynamicMapYaw = TrackedPawn->GetActorRotation().Yaw;
 					break;
 				}
-				// Chúng ta không xoay offset theo TotalStaticRotation vì material đã làm điều đó
-				RotatedPixelOffset = PixelOffset.GetRotated(DynamicMapYaw);
+				RotatedPixelOffset = PixelOffset.GetRotated(-(InTotalStaticRotation + DynamicMapYaw));
 			}
 			else
 			{
-				// Khi bản đồ tĩnh, chúng ta xoay offset theo góc tĩnh của bản đồ.
-				RotatedPixelOffset = PixelOffset.GetRotated(InTotalStaticRotation);
+				RotatedPixelOffset = PixelOffset.GetRotated(-InTotalStaticRotation);
 			}
 
-			FinalPosition = CanvasCenter + RotatedPixelOffset;
-		}
-
-		// --- Cập nhật Widget ---
-		UOBMapMarkerWidget* MarkerWidget = ActiveMarkerWidgets.FindRef(Marker->MarkerID);
-		if (!MarkerWidget)
-		{
-			MarkerWidget = CreateWidget<UOBMapMarkerWidget>(this, MarkerWidgetClass);
-			if (MarkerWidget)
+			// --- LOGIC CLAMPING ---
+			if (RotatedPixelOffset.SizeSquared() > FMath::Square(MinimapRadius))
 			{
-				if (GEngine && ConfigAsset->bShowDebugMessages)
+				FVector2D ClampedOffset = RotatedPixelOffset.GetSafeNormal() * MinimapRadius;
+				FinalPosition = CanvasCenter + ClampedOffset;
+				IndicatorAngle = FMath::RadiansToDegrees(FMath::Atan2(RotatedPixelOffset.Y, RotatedPixelOffset.X));
+			}
+			else
+			{
+				FinalPosition = CanvasCenter + RotatedPixelOffset;
+				if (Marker->TrackedActor.IsValid())
 				{
-					GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Orange,
-					                                 FString::Printf(
-						                                 TEXT("CREATED new Minimap Widget for Marker [%s]"),
-						                                 *Marker->MarkerID.ToString().Left(8)));
+					IndicatorAngle = Marker->TrackedActor->GetActorRotation().Yaw + InTotalStaticRotation;
 				}
-				MinimapMarkerCanvas->AddChild(MarkerWidget);
-				ActiveMarkerWidgets.Add(Marker->MarkerID, MarkerWidget);
-			}
-			else
-			{
-				continue;
+				else
+				{
+					IndicatorAngle = InTotalStaticRotation;
+				}
 			}
 		}
 
-		if (MarkerWidget->GetParent() != MinimapMarkerCanvas)
-		{
-			MarkerWidget->RemoveFromParent();
-			MinimapMarkerCanvas->AddChild(MarkerWidget);
-		}
-
-		MarkerWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-
-		float IndicatorAngle = 0.0f;
-		if (Marker->TrackedActor.IsValid())
-		{
-			IndicatorAngle = Marker->TrackedActor->GetActorRotation().Yaw + InTotalStaticRotation;
-		}
-
-		MarkerWidget->UpdateMarkerVisuals(
-			Marker->ConfigAsset->IdentifierIconTexture,
-			Marker->ConfigAsset->DirectionalIndicatorTexture,
-			IndicatorAngle);
+		MarkerWidget->UpdateRotation(IndicatorAngle);
 
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
 		{
-			CanvasSlot->SetPosition(FinalPosition - (Marker->ConfigAsset->Size / 2.0f));
+			// Áp dụng logic bù trừ pivot
+			const FVector2D MarkerSize = MarkerWidget->GetDesiredSize();
+			const FVector2D Pivot = Marker->ConfigAsset->IndicatorPivot;
+			const FVector2D PivotOffset = (Pivot - FVector2D(0.5f, 0.5f)) * MarkerSize;
+			const FVector2D RotatedPivotOffset = PivotOffset.GetRotated(IndicatorAngle);
+			const FVector2D SlotPosition = FinalPosition - (MarkerSize / 2.0f) - (RotatedPivotOffset - PivotOffset);
+
+			CanvasSlot->SetPosition(SlotPosition);
 			CanvasSlot->SetZOrder(Marker->MarkerID == PlayerMarkerID ? 10 : 1);
 		}
 
@@ -463,8 +342,15 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 				)
 			);
 		}
+
+		if (GEngine && ConfigAsset->bShowDebugMessages && Marker->MarkerID == PlayerMarkerID)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1, 0.0f, FColor::White,
+				FString::Printf(TEXT("Player Marker Widget Visibility: %d"), MarkerWidget->GetVisibility())
+			);
+		}
 	}
-	
 }
 
 void UOBMinimapWidget::OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer)
@@ -495,22 +381,4 @@ float UOBMinimapWidget::GetAlignmentAngle() const
 	case EMapAlignment::Left_MinusY: return -90.0f;
 	default: return 0.0f;
 	}
-}
-
-float UOBMinimapWidget::GetCompassRadius() const
-{
-	if (!ConfigAsset || !MapImage)
-	{
-		return 100.0f; // Return a default fallback value
-	}
-
-	// The minimap is assumed to be a square or circle.
-	// We take the width of the MapImage as the base size.
-	const float MinimapSize = MapImage->GetCachedGeometry().GetLocalSize().X;
-
-	// The radius of the minimap itself is half its size.
-	const float MinimapRadius = MinimapSize / 2.0f;
-
-	// The compass radius is the minimap radius plus the desired padding.
-	return MinimapRadius + ConfigAsset->CompassPadding;
 }

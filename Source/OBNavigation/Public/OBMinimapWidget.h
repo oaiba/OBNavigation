@@ -78,19 +78,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> CompassRingImage;
 
-	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
-	TObjectPtr<UCanvasPanel> CompassMarkerCanvas;
-
 private:
 	// Helper function to get the base rotation angle from the alignment enum.
 	float GetAlignmentAngle() const;
-	float GetCompassRadius() const;
-	// Helper function to update the compass and its markers.
-	void UpdateCompassMarkers(const APawn* TrackedPawn, float InTotalStaticRotation, TSet<FGuid>& OutHandledMarkerIDs);
 	void UpdateMinimapMarkers(const APawn* TrackedPawn, float InTotalStaticRotation, TSet<FGuid>& OutHandledMarkerIDs);
 
 	// --- CACHED POINTERS ---
-	// Cached pointer to our subsystem for quick access
+	// Cached the pointer to our subsystem for quick access
 	UPROPERTY(Transient)
 	TObjectPtr<UOBNavigationSubsystem> NavSubsystem;
 
@@ -101,7 +95,7 @@ private:
 	// --- UNIFIED WIDGET POOL ---
 	// A single map to hold all active marker widgets, regardless of where they are displayed.
 	UPROPERTY(Transient)
-	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveMarkerWidgets; 
+	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveMinimapMarkerWidgets; 
 	
 	// --- CONFIGURATION ---
 	// Configuration asset for visual resources. Set via InitializeAndStartTracking.

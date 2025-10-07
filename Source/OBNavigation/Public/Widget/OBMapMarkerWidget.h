@@ -19,15 +19,23 @@ class OBNAVIGATION_API UOBMapMarkerWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	
 	/**
-	 * @brief Updates the visual representation of the marker.
-	 * This function is designed to be called every frame from the main map widget.
+	 * @brief Sets up the static visual properties of the marker.
+	 * Call this ONLY ONCE when the widget is created.
 	 * @param IdentifierTexture The texture for the non-rotating identifier icon.
 	 * @param IndicatorTexture The texture for the rotating directional indicator. Can be null.
-	 * @param IndicatorAngle The rotation angle (in degrees) for the directional indicator.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Map Marker")
-	void UpdateMarkerVisuals(UTexture2D* IdentifierTexture, UTexture2D* IndicatorTexture, float IndicatorAngle);
+	void InitializeMarker(UTexture2D* IdentifierTexture, UTexture2D* IndicatorTexture);
+
+	/**
+	 * @brief Updates the dynamic properties of the marker, like rotation.
+	 * Call this every frame.
+	 * @param IndicatorAngle The new rotation angle (in degrees) for the directional indicator.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Map Marker")
+	void UpdateRotation(float IndicatorAngle);
 
 protected:
 	// This function is called when the widget is constructed in the game.

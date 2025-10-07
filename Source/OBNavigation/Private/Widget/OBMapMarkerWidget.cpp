@@ -5,23 +5,29 @@
 
 #include "Components/Image.h"
 
-void UOBMapMarkerWidget::UpdateMarkerVisuals(UTexture2D* IdentifierTexture, UTexture2D* IndicatorTexture, float IndicatorAngle)
+void UOBMapMarkerWidget::InitializeMarker(UTexture2D* IdentifierTexture, UTexture2D* IndicatorTexture)
 {
-	// Update the static identifier icon
+	// Set the static identifier icon's texture and visibility
 	if (IdentifierIcon)
 	{
 		IdentifierIcon->SetBrushFromTexture(IdentifierTexture);
-		// Hide the icon if no texture is provided
 		IdentifierIcon->SetVisibility(IdentifierTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 	
-	// Update the dynamic directional indicator
+	// Set the directional indicator's texture and visibility
 	if (DirectionalIndicator)
 	{
 		DirectionalIndicator->SetBrushFromTexture(IndicatorTexture);
-		DirectionalIndicator->SetRenderTransformAngle(IndicatorAngle);
-		// Hide the indicator if no texture is provided
 		DirectionalIndicator->SetVisibility(IndicatorTexture ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+}
+
+void UOBMapMarkerWidget::UpdateRotation(const float IndicatorAngle)
+{
+	// Only update the angle of the directional indicator
+	if (DirectionalIndicator)
+	{
+		DirectionalIndicator->SetRenderTransformAngle(IndicatorAngle);
 	}
 }
 
