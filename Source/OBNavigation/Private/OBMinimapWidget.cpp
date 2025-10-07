@@ -364,24 +364,32 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
 		{
+			// --- FIX STARTS HERE ---
+
+			// 1. Use the size defined in the config asset, not the widget's desired size.
+			// This ensures the pivot calculations are based on our intended dimensions.
+			const FVector2D MarkerSize = Marker->ConfigAsset->Size;
 			FVector2D SlotPosition;
+			
 			if (Marker->MarkerID == PlayerMarkerID)
 			{
-				// FOR THE PLAYER: The position is simply the center of the canvas.
 				SlotPosition = FinalPosition;
 			}
 			else
 			{
-				// FOR OTHER MARKERS: We still need pivot compensation, but without the half-size offset.
-				const FVector2D MarkerSize = MarkerWidget->GetDesiredSize();
+				// Pivot compensation logic now correctly uses the config size.
 				const FVector2D Pivot = Marker->ConfigAsset->IndicatorPivot;
 				const FVector2D PivotOffset = (Pivot - FVector2D(0.5f, 0.5f)) * MarkerSize;
 				const FVector2D RotatedPivotOffset = PivotOffset.GetRotated(IndicatorAngle);
 				SlotPosition = FinalPosition - (RotatedPivotOffset - PivotOffset);
 			}
 
+			// 2. Explicitly set the size of the widget in the canvas panel.
+			// This overrides any incorrect default layout size from the Blueprint and fixes the distortion.
+			CanvasSlot->SetSize(MarkerSize);
 			CanvasSlot->SetPosition(SlotPosition);
 			CanvasSlot->SetZOrder(Marker->MarkerID == PlayerMarkerID ? 10 : 1);
+			
 			// --- FIX ENDS HERE ---
 		}
 
