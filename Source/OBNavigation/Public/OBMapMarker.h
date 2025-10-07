@@ -24,6 +24,13 @@ struct FMarkerVisibilityOptions
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visibility")
 	bool bShowOnCompass = false;
+
+	FMarkerVisibilityOptions(const bool bShowOnMinimap, const bool bShowOnFullMap, const bool bShowOnCompass)
+		: bShowOnMinimap(bShowOnMinimap),
+		  bShowOnFullMap(bShowOnFullMap),
+		  bShowOnCompass(bShowOnCompass)
+	{
+	}
 };
 
 UCLASS(BlueprintType)
@@ -55,7 +62,7 @@ public:
 	FLinearColor Color = FLinearColor::White;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
-	FMarkerVisibilityOptions Visibility;
+	FMarkerVisibilityOptions Visibility = FMarkerVisibilityOptions(true, true, true);
 	
 	// Optional: For markers that should disappear after a duration (like pings)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
