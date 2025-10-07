@@ -31,6 +31,10 @@ struct FMarkerVisibilityOptions
 		  bShowOnCompass(bShowOnCompass)
 	{
 	}
+
+	FMarkerVisibilityOptions()
+	{
+	}
 };
 
 UCLASS(BlueprintType)
@@ -39,7 +43,6 @@ class OBNAVIGATION_API UOBMarkerConfigAsset : public UDataAsset
 	GENERATED_BODY()
 
 public:
-
 	// The icon that identifies the object (e.g., a quest exclamation mark, a player number).
 	// This part will NOT rotate.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
@@ -49,7 +52,7 @@ public:
 	// This part WILL rotate. If null, no directional indicator will be shown.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
 	TObjectPtr<UTexture2D> DirectionalIndicatorTexture;
-	
+
 	// The pivot point for the Directional Indicator's rotation, in normalized 0-1 space.
 	// (0.5, 0.5) is the center. (0.5, 0.0) is the top-center edge.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
@@ -63,7 +66,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
 	FMarkerVisibilityOptions Visibility = FMarkerVisibilityOptions(true, true, true);
-	
+
 	// Optional: For markers that should disappear after a duration (like pings)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Marker Config")
 	float LifeTime = 0.0f; // 0.0 means infinite
@@ -106,9 +109,8 @@ public:
 
 	// Initializes the marker. Called by the subsystem.
 	void Init(const FGuid& InID, AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName,
-			  FVector InStaticLocation = FVector::ZeroVector);
+	          FVector InStaticLocation = FVector::ZeroVector);
 
 	// Updates the marker's world location (if tracking an actor)
 	void UpdateLocation();
-
 };
