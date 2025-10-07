@@ -194,8 +194,8 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 
 		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Cyan,
 		                                 FString::Printf(TEXT("--- MINIMAP DEBUG ---")));
-		// GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::White,
-		//                                  FString::Printf(TEXT("Character World Yaw: %.2f"), CharacterWorldYaw));
+		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::White,
+		                                 FString::Printf(TEXT("Character World Yaw: %.2f"), CharacterWorldYaw));
 		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::White,
 		                                 FString::Printf(TEXT("Alignment Angle: %.2f"), AlignmentAngle));
 		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::White,
@@ -263,30 +263,43 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			                               Marker->ConfigAsset->DirectionalIndicatorTexture);
 		}
 
+		// --- START: REPLACEMENT LOGIC FOR POSITION AND ROTATION ---
 		FVector2D FinalPosition;
 		float IndicatorAngle = 0.0f;
 
-		// --- LOGIC VỊ TRÍ VÀ XOAY MỚI ---
+		// This block now correctly handles all rotation cases based on map type
 		if (Marker->MarkerID == PlayerMarkerID)
 		{
-			// Người chơi luôn ở giữa
+			// The player is always in the center.
 			FinalPosition = CanvasCenter;
-			IndicatorAngle = TrackedPawn->GetActorRotation().Yaw + InTotalStaticRotation;
+
+			if (ConfigAsset->bShouldRotateMap)
+			{
+				// On a rotating map, the player's icon should always point "up".
+				IndicatorAngle = 0.0f;
+			}
+			else
+			{
+				// On a static map, the player's icon must show its true world orientation,
+				// compensating for the map's static rotation.
+				// We SUBTRACT the static rotation, not add it.
+				IndicatorAngle = TrackedPawn->GetActorRotation().Yaw - InTotalStaticRotation;
+			}
 		}
 		else
 		{
+			// Logic for all other markers (NPCs, objectives, etc.)
 			FVector2D MarkerUV;
 			NavSubsystem->WorldToMapUV(CurrentLayer, Marker->WorldLocation, MarkerUV);
 
 			const FVector2D UVDifference = MarkerUV - PlayerUV;
-			FVector2D PixelOffset = UVDifference * CanvasSize * ConfigAsset->Zoom;
-
-			// Áp dụng xoay cho offset
+			const FVector2D PixelOffset = UVDifference * CanvasSize * ConfigAsset->Zoom;
 			FVector2D RotatedPixelOffset;
+
+			// This part correctly calculates the marker's position on the canvas
 			if (ConfigAsset->bShouldRotateMap)
 			{
 				float DynamicMapYaw = 0.0f;
-				// Lấy DynamicMapYaw tương tự như trong NativeTick
 				switch (ConfigAsset->RotationSource)
 				{
 				case EMinimapRotationSource::ControlRotation:
@@ -303,26 +316,49 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 				RotatedPixelOffset = PixelOffset.GetRotated(-InTotalStaticRotation);
 			}
 
-			// --- LOGIC CLAMPING ---
+			// --- Clamping and Angle Calculation Logic ---
 			if (RotatedPixelOffset.SizeSquared() > FMath::Square(MinimapRadius))
 			{
-				FVector2D ClampedOffset = RotatedPixelOffset.GetSafeNormal() * MinimapRadius;
+				// CASE 1: The marker is clamped to the edge of the minimap.
+				// Its indicator should point from the center towards its off-screen location.
+				// This existing logic is correct and remains unchanged.
+				const FVector2D ClampedOffset = RotatedPixelOffset.GetSafeNormal() * MinimapRadius;
 				FinalPosition = CanvasCenter + ClampedOffset;
 				IndicatorAngle = FMath::RadiansToDegrees(FMath::Atan2(RotatedPixelOffset.Y, RotatedPixelOffset.X));
 			}
 			else
 			{
+				// CASE 2: The marker is visible inside the minimap.
 				FinalPosition = CanvasCenter + RotatedPixelOffset;
+
+				float ActorWorldYaw = 0.0f; // Default for static markers (points to World North +X)
 				if (Marker->TrackedActor.IsValid())
 				{
-					IndicatorAngle = Marker->TrackedActor->GetActorRotation().Yaw + InTotalStaticRotation;
+					ActorWorldYaw = Marker->TrackedActor->GetActorRotation().Yaw;
+				}
+
+				if (ConfigAsset->bShouldRotateMap)
+				{
+					// On a rotating map, the marker's angle is relative to the player's view.
+					float PlayerYaw = 0.0f;
+					switch (ConfigAsset->RotationSource)
+					{
+					case EMinimapRotationSource::ControlRotation: PlayerYaw = TrackedPawn->GetControlRotation().Yaw;
+						break;
+					case EMinimapRotationSource::ActorRotation: PlayerYaw = TrackedPawn->GetActorRotation().Yaw;
+						break;
+					}
+					IndicatorAngle = ActorWorldYaw - PlayerYaw;
 				}
 				else
 				{
-					IndicatorAngle = InTotalStaticRotation;
+					// On a static map, the marker shows its true world orientation,
+					// compensating for the map's static rotation.
+					IndicatorAngle = ActorWorldYaw - InTotalStaticRotation;
 				}
 			}
 		}
+		// --- END: REPLACEMENT LOGIC ---
 
 		MarkerWidget->UpdateRotation(IndicatorAngle);
 
