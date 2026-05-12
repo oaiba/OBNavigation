@@ -2,207 +2,338 @@
 
 ## Overview
 
-**OBNavigation** is a comprehensive, production-ready navigation system for Unreal Engine 5. It provides a robust architecture for implementing Minimaps, Compasses, and World Maps with dynamic markers, multiplayer awareness, and data-driven configuration.
+**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides map layers, minimap/full-map marker projection, marker pooling, visibility policy filtering, and data-driven marker configuration. Multiplayer ownership, team, ping, extraction, and loot rules are supplied by game-specific bridge code such as `ExtractionCoreGame`'s `UOverlayController_Navigation`.
 
-### Key Features
-- **Centralized Subsystem Architecture:** `UOBNavigationSubsystem` acts as the single source of truth, minimizing per-tick overhead on individual actors.
-- **Data-Driven Configuration:** Visual and behavioral settings are managed via `UDataAsset`, making it highly designer-friendly.
-- **Optimized Rendering:** Minimap panning, zooming, and rotation are driven entirely by dynamic material parameters. Zero Render Target overhead.
-- **Multiplayer Ready:** Designed with Dedicated Servers in mind. Markers are intelligently registered only where needed (Client/Proxy), skipping unnecessary server calculations.
-- **Efficient Marker Management:** Uses an `FGuid`-based dictionary and widget pooling for O(1) lookups and minimized garbage collection.
-- **Dynamic Layer Auto-Switching:** Supports multi-level maps (e.g., dungeons vs. overworld) with prioritized auto-switching based on world bounds.
+The current V1 target is a **multiplayer top-down extraction shooter**:
 
----
+- Local player marker on minimap.
+- Squad-only teammate markers.
+- Squad ping markers driven by replicated ping actors.
+- Static or dynamic POI markers through `UOBNavigationSourceComponent`.
+- Data-driven map layers and marker configs through a registry asset.
+- No fog of war, path routing, or render-target map generation in this plugin.
+
+## Key Features
+
+- **Central subsystem:** `UOBNavigationSubsystem` owns map layers, active marker objects, projection utilities, visibility filtering, and marker lifetime cleanup.
+- **Registry-driven setup:** `UOBNavigationMapRegistryAsset` lists map layers and marker configs keyed by `FGameplayTag`; `UOBNavigationDeveloperSettings` points the runtime to the default registry.
+- **Marker spec API:** `FOBNavigationMarkerSpec` supports marker type, tracked actor, static location, lifetime, owner player id, team id, visibility policy, and sort priority.
+- **Visibility policies:** `LocalOnly`, `SquadOnly`, `Public`, and `DebugOnly` prevent unwanted enemy markers from appearing by default.
+- **Cook-friendly asset loading:** runtime loads from configured soft references instead of scanning all assets with `AssetRegistry`.
+- **Minimap projection:** map panning, zooming, rotation, and player UV are driven through dynamic material parameters.
+- **Widget pooling:** marker widgets are reused and removed when markers are no longer visible.
+- **Extraction integration:** `ExtractionCoreGame` bridges team snapshots and replicated ping actors into this plugin.
 
 ## Architecture
 
-### Data Flow
-
 ```mermaid
 flowchart TD
-    subgraph Core
-        Subsystem[UOBNavigationSubsystem]
-    end
+    Registry["UOBNavigationMapRegistryAsset"]
+    Settings["UOBNavigationDeveloperSettings"]
+    Subsystem["UOBNavigationSubsystem"]
+    Source["UOBNavigationSourceComponent"]
+    NavComp["UOBNavigationComponent"]
+    Bridge["ExtractionCoreGame: UOverlayController_Navigation"]
+    Team["Team snapshots"]
+    Pings["Replicated APingMarkerActor"]
+    Minimap["UOBMinimapWidget"]
+    Tactical["UOBTacticalMapWidget"]
+    MarkerWidget["UOBMapMarkerWidget"]
 
-    subgraph Data Assets
-        LayerData(UOBMapLayerAsset)
-        MarkerConfig(UOBMarkerConfigAsset)
-        MinimapConfig(UOBMinimapConfigAsset)
-    end
-
-    subgraph Actors
-        NavComp[UOBNavigationComponent]
-    end
-
-    subgraph UI
-        MinimapWidget[UOBMinimapWidget]
-        MarkerWidget[UOBMapMarkerWidget]
-    end
-
-    NavComp -- Registers Actor --> Subsystem
-    LayerData -. Configures .-> Subsystem
-    MarkerConfig -. Configures .-> Subsystem
-    
-    Subsystem -- Broadcasts Layer Change --> MinimapWidget
-    Subsystem -- Ticks Active Markers --> MinimapWidget
-    
-    MinimapConfig -. Configures .-> MinimapWidget
-    MinimapWidget -- Instantiates/Updates --> MarkerWidget
+    Settings --> Registry
+    Registry --> Subsystem
+    NavComp --> Subsystem
+    Source --> Subsystem
+    Team --> Bridge
+    Pings --> Bridge
+    Bridge --> Subsystem
+    Subsystem --> Minimap
+    Subsystem --> Tactical
+    Minimap --> MarkerWidget
+    Tactical --> MarkerWidget
 ```
 
-### Class Relationship
-
-```mermaid
-classDiagram
-    class UOBNavigationSubsystem {
-        +RegisterMapMarker()
-        +UnregisterMapMarker()
-        +WorldToMapUV()
-        -UpdateAllMarkers()
-    }
-    class UOBNavigationComponent {
-        +CharacterMapMarkerConfig
-        -RegisterCharacterMarker()
-    }
-    class UOBMinimapWidget {
-        +InitializeAndStartTracking()
-        -UpdateMinimapMarkers()
-    }
-    class UOBMapMarker {
-        +FGuid MarkerID
-        +FVector WorldLocation
-    }
-    
-    UOBNavigationSubsystem "1" *-- "many" UOBMapMarker : manages
-    UOBNavigationComponent ..> UOBNavigationSubsystem : registers to
-    UOBMinimapWidget ..> UOBNavigationSubsystem : observes
-    UOBMinimapWidget "1" *-- "many" UOBMapMarkerWidget : pools
-```
-
----
+`OBNavigation` remains game-agnostic. It does not decide who is a teammate, whether a ping is legal, or which extraction zones are active. Those rules belong in the game module and are submitted to the subsystem as marker specs.
 
 ## Module Dependencies
 
-| Module | Type | Description |
+| Module | Type | Purpose |
 |---|---|---|
 | `Core` | Public | Core engine types |
-| `UMG` | Public | Unreal Motion Graphics for UI |
-| `CoreUObject` | Private | UObject core features |
-| `Engine` | Private | Core engine framework |
-| `Slate` / `SlateCore`| Private | UI Framework |
+| `DeveloperSettings` | Public | Project settings for default navigation registry |
+| `GameplayTags` | Public | Marker type keys and integration with game tag systems |
+| `UMG` | Public | Widget base classes |
+| `CoreUObject` | Private | UObject support |
+| `Engine` | Private | Actor, world, pawn, data asset support |
+| `Slate` / `SlateCore` | Private | UI framework |
 
----
+## Core API
 
-## Class Reference
+### `UOBNavigationSubsystem`
 
-### Core Classes
-
-#### `UOBNavigationSubsystem`
-The central brain of the plugin. Inherits from `UGameInstanceSubsystem`.
+The subsystem is the runtime source of truth for local navigation UI.
 
 | Function | Description |
 |---|---|
-| `SetTrackedPlayerPawn(APawn*)` | Sets the pawn the local minimap focuses on. |
-| `RegisterMapMarker(...)` | Registers an actor/location to the map, returns `FGuid`. |
-| `UnregisterMapMarker(FGuid)` | Removes a marker from the subsystem. |
-| `WorldToMapUV(...)` | Converts a 3D World space coordinate to a 2D 0-1 UV map space. |
+| `SetTrackedPlayerPawn(APawn*)` | Sets the pawn the minimap follows. |
+| `SetLocalNavigationContext(int32 PlayerId, int32 TeamId)` | Sets local player/team context for visibility filtering. |
+| `RegisterOrUpdateMarker(const FOBNavigationMarkerSpec&)` | Adds or updates a marker. Returns a stable `FGuid`. |
+| `UnregisterMarker(const FGuid&)` | Removes a marker and its reverse actor lookup. |
+| `GetVisibleMarkers(EOBNavigationSurface)` | Returns markers visible on Minimap, FullMap, or Compass after policy filtering. |
+| `WorldToMapUVChecked(...)` | Converts world location to UV and returns a projection result enum. |
+| `RegisterMapMarker(...)` / `UnregisterMapMarker(...)` | Legacy Blueprint-compatible wrappers. Prefer the marker spec API for new work. |
 
-| Delegates | Description |
+### `FOBNavigationMarkerSpec`
+
+Use this when registering dynamic markers.
+
+| Field | Meaning |
 |---|---|
-| `OnMinimapLayerChanged` | Fired when the player enters a new map layer boundary. |
-| `OnMarkersUpdated` | Fired when markers are added, removed, or their logic states change. |
+| `MarkerId` | Existing marker id to update; invalid means create new. |
+| `MarkerType` | Gameplay tag used to resolve config from registry. |
+| `LayerName` | Logical layer/group name such as `Squad`, `Pings`, `Extraction`. |
+| `TrackedActor` | Optional actor to follow each tick. |
+| `WorldLocation` / `WorldRotation` | Static fallback position and direction. |
+| `ConfigAsset` | Optional direct config override. |
+| `LifeTime` | Local lifetime when not owned by an external replicated actor. |
+| `OwnerPlayerId` / `TeamId` | Used by visibility policies. |
+| `VisibilityPolicy` | `LocalOnly`, `SquadOnly`, `Public`, or `DebugOnly`. |
+| `SortPriority` | Higher priority markers render above lower priority markers. |
 
-#### `UOBNavigationComponent`
-An `UActorComponent` used to link game actors (like Characters) to the global subsystem.
+### `UOBNavigationSourceComponent`
 
-| Property | Description |
-|---|---|
-| `CharacterMapMarkerConfig` | The `UOBMarkerConfigAsset` defining how this actor looks on the map. |
-| `CharacterMapMarkerLayerName` | Logical grouping layer (e.g., "Players", "Enemies"). |
+Attach this to actors that should expose themselves as navigation POIs.
 
-### Data Assets
+Important properties:
 
-#### `UOBMapLayerAsset`
-Defines a specific map background and its real-world boundaries.
-* **MapTexture:** 2D Top-down rendering of the level.
-* **WorldBounds:** The `FBox` that the texture accurately covers.
-* **Priority:** Higher priority layers are chosen when bounds overlap (e.g., inside a house vs. outside).
+- `MarkerType`
+- `MarkerConfig`
+- `LayerName`
+- `VisibilityPolicy`
+- `bTrackOwner`
+- `bRegisterOnBeginPlay`
+- `OwnerPlayerId`
+- `TeamId`
+- `SortPriority`
 
-#### `UOBMarkerConfigAsset`
-Defines visual properties and visibility rules for a marker.
-* **IdentifierIconTexture:** The static main icon (e.g., a dot, skull).
-* **IndicatorMaterial:** The rotating directional cone/arrow.
-* **Visibility:** Struct (`FMarkerVisibilityOptions`) controlling Minimap, FullMap, and Compass toggles.
-* **LifeTime:** Auto-destroy timer (0 = infinite).
+Runtime methods:
 
-#### `UOBMinimapConfigAsset`
-Central config for the Minimap UI.
-* **MinimapBackgroundMaterial:** The base material that handles panning/zoom mathematically.
-* **Zoom:** Global map scale.
-* **RotationSource:** Control Rotation vs Actor Rotation.
-* **MinimapShape:** Circle vs Square masking.
-* **MapAlignment:** Defines which world axis is "Up" (+X, +Y, -X, -Y).
+- `RegisterOrUpdateNavigationMarker()`
+- `UnregisterNavigationMarker()`
+- `GetMarkerId()`
 
-### UI Widgets
+### `UOBNavigationComponent`
 
-#### `UOBMinimapWidget`
-The core HUD element.
-* **Required BindWidgets:** `MapImage`, `MinimapMarkerCanvas`, `CompassRingImage`.
-* **Initialization:** Must call `InitializeAndStartTracking(UOBMinimapConfigAsset*)` manually after creation.
+Attach to the local player character/pawn for standard self-marker behavior. It now registers only locally controlled characters as `LocalOnly`; replicated remote characters are not automatically shown. Teammates should come from the game bridge/controller, not from this component.
 
-#### `UOBMapMarkerWidget`
-The base class for individual icons on the map.
-* **Required BindWidgets:** `IdentifierIcon`, `DirectionalIndicator`.
+## Data Assets
 
----
+### `UOBNavigationMapRegistryAsset`
+
+Create one registry asset for the project or per game mode/map family.
+
+- `MapLayers`: ordered at runtime by each layer's `Priority`.
+- `MarkerConfigs`: maps `FGameplayTag` marker types to `UOBMarkerConfigAsset`.
+
+Set the default registry in **Project Settings -> OB Navigation -> Default Map Registry**.
+
+### `UOBMapLayerAsset`
+
+Defines one map texture and its world bounds.
+
+- `MapTexture`: top-down texture used by the minimap material.
+- `WorldBounds`: world-space `FBox`; X/Y define projection coverage.
+- `Priority`: higher priority wins when layers overlap.
+
+### `UOBMarkerConfigAsset`
+
+Defines marker visuals and surface visibility.
+
+- `IdentifierIconTexture`
+- `IndicatorMaterial`
+- `IndicatorPivot`
+- `Size`
+- `Color`
+- `Visibility`: minimap/full-map/compass booleans.
+- `LifeTime`: local auto-remove timer. Use 0 for infinite or externally owned markers.
+
+### `UOBMinimapConfigAsset`
+
+Defines minimap rendering settings.
+
+- `MinimapBackgroundMaterial`: must support `MapTexture`, `PlayerPositionUV`, `PlayerYaw`, `Zoom`, `MapRotationOffsetRad`, and `ShapeAlpha`.
+- `Zoom`, `MinZoom`, `MaxZoom`
+- `RotationSource`: for top-down shooters, `ActorRotation` is the recommended default.
+- `bShouldRotateMap`
+- `MapRotationOffset`
+- `MapAlignment`
+- `MinimapShape`
+- `bShowDebugMessages`
+
+## UI Widgets
+
+### `UOBMinimapWidget`
+
+Required child widgets:
+
+- `MapImage`
+- `MinimapMarkerCanvas`
+- `CompassRingImage`
+
+Runtime:
+
+- Call `InitializeAndStartTracking(UOBMinimapConfigAsset*)` after creating/adding the widget.
+- Call `SetMinimapZoom(float)` for runtime zoom.
+- The widget unbinds subsystem delegates and clears marker widgets in `NativeDestruct`.
+
+### `UOBTacticalMapWidget`
+
+Full-map variant based on `UOBMinimapWidget`.
+
+Blueprint-callable helpers:
+
+- `AddZoomInput(float ZoomDelta)`
+- `SetPanInput(FVector2D InPanInput)`
+- `GetPanInput()`
+
+V1 exposes pan/zoom state for UI input wiring. Full bespoke map interactions can be layered in Blueprint or extended in C++.
+
+### `UOBMapMarkerWidget`
+
+Required child widgets:
+
+- `IdentifierIcon`
+- `DirectionalIndicator`
+
+Optional child widgets:
+
+- `DistanceText`
+
+Runtime methods:
+
+- `InitializeMarker(UTexture2D*, UMaterialInterface*)`
+- `UpdateVisuals(float IndicatorAngle, float ViewAngle, float ViewDistance)`
+- `UpdateDistance(float DistanceMeters, bool bIsClampedToEdge)`
+
+## ExtractionCoreGame Integration
+
+`ExtractionCoreGame` depends on `OBNavigation` and adds `UOverlayController_Navigation`.
+
+The controller bridges:
+
+- `UOverlayController_Team` teammate snapshots -> squad-only teammate markers.
+- replicated `APingMarkerActor` instances -> squad-only ping markers.
+- local player/team context -> `UOBNavigationSubsystem::SetLocalNavigationContext`.
+- possessed pawn -> `UOBNavigationSubsystem::SetTrackedPlayerPawn`.
+
+To use it, add `UOverlayController_Navigation` to the HUD's `OverlayControllerClasses` in the project/HUD Blueprint. Configure marker tags and optional direct marker config overrides on the controller.
+
+Ping safety is handled in `UPingComponent`:
+
+- Client requests still originate from local trace.
+- Server validates owner player id, ping tag validity, distance from pawn, and cooldown.
+- Ping actors remain the replicated authoritative source; navigation only visualizes them.
 
 ## Integration Guide
 
-### Step 1: Create Data Assets
-1. Right-click in Content Browser -> **Miscellaneous** -> **Data Asset**.
-2. Create a `UOBMapLayerAsset`. Set your top-down texture and define the `WorldBounds` covering that area.
-3. Create a `UOBMinimapConfigAsset`. Assign a material that accepts `PlayerPositionUV`, `PlayerYaw`, `Zoom`, and `MapRotationOffsetRad` parameters.
-4. Create a `UOBMarkerConfigAsset` for your player icon.
+1. Create map layer assets:
+   - Create `UOBMapLayerAsset` assets.
+   - Assign `MapTexture`.
+   - Set `WorldBounds` accurately for the playable area.
+   - Use `Priority` for overlapping indoor/floor/zone maps.
 
-### Step 2: Add Component to Character
-1. Open your Player Character Blueprint.
-2. Add a `OBNavigationComponent`.
-3. In its properties, assign the `CharacterMapMarkerConfig` you created in Step 1.
+2. Create marker config assets:
+   - Player marker.
+   - Squad marker.
+   - Ping marker.
+   - Extraction, loot, objective, or debug marker configs as needed.
+   - Set each config's minimap/full-map/compass visibility.
 
-### Step 3: Setup Minimap UI
-1. Create a new Widget Blueprint, reparent it to `UOBMinimapWidget`.
-2. Add an Image named `MapImage` (for the map material).
-3. Add a CanvasPanel named `MinimapMarkerCanvas` (where icons will spawn).
-4. Add an Image named `CompassRingImage` (for the border).
-5. In your PlayerController or HUD, Create this Widget, Add to Viewport, and call **`InitializeAndStartTracking`**, passing your `UOBMinimapConfigAsset`.
+3. Create a registry asset:
+   - Create `UOBNavigationMapRegistryAsset`.
+   - Add all map layers.
+   - Add marker config entries keyed by gameplay tags.
+   - Set it in **Project Settings -> OB Navigation -> Default Map Registry**.
 
-### Step 4: Setup Marker UI
-1. Create a new Widget Blueprint, reparent it to `UOBMapMarkerWidget`.
-2. Add an Image named `IdentifierIcon` (Size it accordingly).
-3. Add an Image named `DirectionalIndicator` (Make sure its pivot is set to `0.5, 0.5`).
-4. In your Minimap Widget Blueprint, set this new class to the `MarkerWidgetClass` property.
+4. Setup player marker:
+   - Add `UOBNavigationComponent` to the player character.
+   - Assign `CharacterMapMarkerConfig`.
+   - This only registers the locally controlled pawn.
 
----
+5. Setup dynamic POIs:
+   - Add `UOBNavigationSourceComponent` to extraction zones, loot hotspots, or objective actors.
+   - Configure `MarkerType`, `LayerName`, `VisibilityPolicy`, and tracking behavior.
 
-## Multiplayer Considerations
+6. Setup minimap UI:
+   - Reparent the minimap Blueprint to `UOBMinimapWidget`.
+   - Add `MapImage`, `MinimapMarkerCanvas`, and `CompassRingImage`.
+   - Set `MarkerWidgetClass`.
+   - Call `InitializeAndStartTracking` with `UOBMinimapConfigAsset`.
 
-- **Server Optimization:** Dedicated servers (`NM_DedicatedServer`) actively skip tracking local pawns and registering unnecessary UI markers.
-- **Client Synchronization:** Marker lifetimes (like pings) tick globally. However, spatial and visual updates are purely client-side logic.
-- **Replication:** The `OBNavigation` system itself does not handle network replication. You should attach `UOBNavigationComponent` to replicated Actors, and the client will automatically visualize them based on their local network proxies.
+7. Setup marker UI:
+   - Reparent marker Blueprint to `UOBMapMarkerWidget`.
+   - Add `IdentifierIcon` and `DirectionalIndicator`.
+   - Optionally add `DistanceText` for edge-clamped markers.
 
----
+8. Setup Extraction bridge:
+   - Add `UOverlayController_Navigation` to `AExtractionHUD::OverlayControllerClasses`.
+   - Configure teammate and ping marker tags/configs.
+   - Ensure `UOverlayController_Team` and `UOverlayController_InRaidMain` remain registered; HUD ordering code keeps dependencies before navigation.
+
+## Multiplayer Rules
+
+- `OBNavigation` itself is local UI state, not a replicated authority.
+- Replicated gameplay systems provide marker sources:
+  - team snapshots for teammates,
+  - `APingMarkerActor` for pings,
+  - actor/source components for game POIs.
+- Enemy actors are not shown automatically.
+- Use `Public` only for markers that every local player should see.
+- Use `SquadOnly` for team/ping data with valid `TeamId`.
+- Use `LocalOnly` for self-only markers.
+- Use `DebugOnly` for development markers controlled by `bShowDebugMarkers`.
 
 ## Coordinate System
 
-The plugin handles the complex math of converting World Space to 2D Map Space via `WorldToMapUV`:
-- Unreal World `+Y` (Right) maps to the `U` coordinate.
-- Unreal World `+X` (Forward) maps to the `V` coordinate.
-- Because texture `V=0` is at the top, the logic naturally flips the `X` axis so North (+X) points Up on the Minimap.
+`WorldToMapUVChecked` maps world coordinates into 0-1 texture UV:
 
-If your game uses a different layout (e.g., +Y is Forward), adjust the `MapAlignment` property in the `UOBMinimapConfigAsset`.
+- World `+Y` maps to horizontal `U`.
+- World `+X` maps to vertical `V`.
+- `V` is flipped so world `+X` appears at the top of the map by default.
 
----
+If your map texture is authored with a different up-axis, adjust `MapAlignment` and `MapRotationOffset` in `UOBMinimapConfigAsset`.
+
+Projection results:
+
+- `Projected`
+- `NoLayer`
+- `OutsideLayer`
+- `InvalidBounds`
+
+Widgets should skip or clamp markers only after checking the projection result. The built-in minimap skips markers outside the active layer.
+
+## Current Limitations
+
+- No fog of war.
+- No pathfinding or route drawing.
+- No shared drawn routes.
+- No render-target map capture.
+- Full tactical map interaction is a V1 base class with zoom/pan hooks, not a finished map screen.
+- Registry asset must be configured in Project Settings or marker tag lookup/map layers will be empty at runtime.
+
+## Build Verification
+
+Verified with:
+
+```bash
+bash /Users/phambaoai/UEProject/OBExtraction/run_build.sh
+```
+
+Result: `Succeeded`.
+
+Known unrelated warning: `StructUtils` is deprecated in UE 5.5+ and is still referenced by the project/plugin setup.
 
 ## Versioning & Credits
-- **Version:** 1.0
+
+- **Version:** 1.1
 - **Created By:** OaiBa
