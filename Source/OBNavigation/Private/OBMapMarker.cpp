@@ -3,42 +3,74 @@
 
 #include "OBMapMarker.h"
 
-#include "OBMapMarker.h" // Make sure this include is at the top
-
-// ... other includes if you have them ...
-
 void UOBMapMarker::Init(const FGuid& InID, AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName, FVector InStaticLocation)
 {
-	// Assign all the provided data to this marker instance
-	this->MarkerID = InID;
-	this->TrackedActor = InTrackedActor;
-	this->ConfigAsset = InConfig;
-	this->MarkerLayerName = InLayerName;
-	
-	// If we are tracking an actor, get its initial location.
-	// Otherwise, use the provided static location.
-	if (InTrackedActor)
-	{
-		this->WorldLocation = InTrackedActor->GetActorLocation();
-	}
-	else
-	{
-		this->WorldLocation = InStaticLocation;
-	}
-
-	// Set the lifetime based on the config. If 0, it's infinite.
-	if (ConfigAsset)
-	{
-		this->CurrentLifeTime = ConfigAsset->LifeTime;
-	}
+	FOBNavigationMarkerSpec Spec;
+	Spec.MarkerId = InID;
+	Spec.TrackedActor = InTrackedActor;
+	Spec.ConfigAsset = InConfig;
+	Spec.LayerName = InLayerName;
+	Spec.WorldLocation = InStaticLocation;
+	Spec.WorldRotation = InTrackedActor ? InTrackedActor->GetActorRotation() : FRotator::ZeroRotator;
+	Spec.LifeTime = InConfig ? InConfig->LifeTime : 0.0f;
+	InitFromSpec(Spec);
 }
 
-// You should also add the implementation for other functions declared in the header
-void UOBMapMarker::UpdateLocation()
+void UOBMapMarker::InitFromSpec(const FOBNavigationMarkerSpec& InSpec)
 {
-	// If this marker is tracking a valid actor, update its WorldLocation
+	MarkerID = InSpec.MarkerId.IsValid() ? InSpec.MarkerId : FGuid::NewGuid();
+	ApplySpec(InSpec);
+}
+
+void UOBMapMarker::ApplySpec(const FOBNavigationMarkerSpec& InSpec)
+{
+	TrackedActor = InSpec.TrackedActor;
+	ConfigAsset = InSpec.ConfigAsset;
+	MarkerLayerName = InSpec.LayerName;
+	MarkerType = InSpec.MarkerType;
+	OwnerPlayerId = InSpec.OwnerPlayerId;
+	TeamId = InSpec.TeamId;
+	VisibilityPolicy = InSpec.VisibilityPolicy;
+	SortPriority = InSpec.SortPriority;
+	CurrentLifeTime = InSpec.LifeTime > 0.0f ? InSpec.LifeTime : (ConfigAsset ? ConfigAsset->LifeTime : 0.0f);
+
 	if (TrackedActor.IsValid())
 	{
 		WorldLocation = TrackedActor->GetActorLocation();
+		WorldRotation = TrackedActor->GetActorRotation();
+	}
+	else
+	{
+		WorldLocation = InSpec.WorldLocation;
+		WorldRotation = InSpec.WorldRotation;
+	}
+}
+
+void UOBMapMarker::UpdateLocation()
+{
+	if (TrackedActor.IsValid())
+	{
+		WorldLocation = TrackedActor->GetActorLocation();
+		WorldRotation = TrackedActor->GetActorRotation();
+	}
+}
+
+bool UOBMapMarker::IsVisibleOnSurface(const EOBNavigationSurface Surface) const
+{
+	if (!ConfigAsset)
+	{
+		return false;
+	}
+
+	switch (Surface)
+	{
+	case EOBNavigationSurface::Minimap:
+		return ConfigAsset->Visibility.bShowOnMinimap;
+	case EOBNavigationSurface::FullMap:
+		return ConfigAsset->Visibility.bShowOnFullMap;
+	case EOBNavigationSurface::Compass:
+		return ConfigAsset->Visibility.bShowOnCompass;
+	default:
+		return false;
 	}
 }

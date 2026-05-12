@@ -3,34 +3,15 @@
 
 #include "OBNavigationSubsystem.h"
 
+#include "OBNavigationDeveloperSettings.h"
+#include "OBNavigationMapRegistryAsset.h"
 #include "OBMapLayerAsset.h"
-#include "AssetRegistry/AssetRegistryModule.h"
 
 void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// Load all map layer assets from the project
-	const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
-		"AssetRegistry");
-	TArray<FAssetData> AssetData;
-	AssetRegistryModule.Get().GetAssetsByClass(UOBMapLayerAsset::StaticClass()->GetClassPathName(), AssetData);
-
-	for (const FAssetData& Data : AssetData)
-	{
-		if (UOBMapLayerAsset* LoadedLayer = Cast<UOBMapLayerAsset>(Data.GetAsset()))
-		{
-			AllMapLayers.Add(LoadedLayer);
-		}
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Loaded %d map layer assets."), *GetName(), __FUNCTION__, AllMapLayers.Num());
-
-	// Sort layers by priority to optimize the search later
-	AllMapLayers.Sort([](const UOBMapLayerAsset& A, const UOBMapLayerAsset& B)
-	{
-		return A.Priority > B.Priority;
-	});
+	LoadRegistryData();
 
 	// Register our custom tick function
 	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(
@@ -42,6 +23,51 @@ void UOBNavigationSubsystem::Deinitialize()
 	// Unregister the tick function
 	FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
 	Super::Deinitialize();
+}
+
+void UOBNavigationSubsystem::LoadRegistryData()
+{
+	AllMapLayers.Reset();
+	AllMarkerConfigs.Reset();
+	MarkerConfigsByTag.Reset();
+	bShowDebugMarkers = false;
+
+	const UOBNavigationDeveloperSettings* Settings = GetDefault<UOBNavigationDeveloperSettings>();
+	bShowDebugMarkers = Settings && Settings->bShowDebugMarkers;
+
+	UOBNavigationMapRegistryAsset* Registry = Settings ? Settings->DefaultMapRegistry.LoadSynchronous() : nullptr;
+	if (!Registry)
+	{
+		UE_LOG(LogTemp, Warning,
+		       TEXT("[%s::%hs] - No DefaultMapRegistry configured. OBNavigation will run, but map layers and marker tag lookup must be provided at runtime."),
+		       *GetName(), __FUNCTION__);
+		return;
+	}
+
+	for (UOBMapLayerAsset* Layer : Registry->MapLayers)
+	{
+		if (Layer)
+		{
+			AllMapLayers.Add(Layer);
+		}
+	}
+
+	AllMapLayers.Sort([](const UOBMapLayerAsset& A, const UOBMapLayerAsset& B)
+	{
+		return A.Priority > B.Priority;
+	});
+
+	for (const FOBNavigationMarkerConfigEntry& Entry : Registry->MarkerConfigs)
+	{
+		if (Entry.MarkerType.IsValid() && Entry.Config)
+		{
+			MarkerConfigsByTag.Add(Entry.MarkerType, Entry.Config);
+			AllMarkerConfigs.Add(Entry.MarkerType.GetTagName(), Entry.Config);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Loaded %d map layers and %d marker configs from registry '%s'."),
+	       *GetName(), __FUNCTION__, AllMapLayers.Num(), MarkerConfigsByTag.Num(), *Registry->GetName());
 }
 
 void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
@@ -61,6 +87,71 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 	}
 }
 
+void UOBNavigationSubsystem::SetLocalNavigationContext(const int32 InLocalPlayerId, const int32 InLocalTeamId)
+{
+	LocalPlayerId = InLocalPlayerId;
+	LocalTeamId = InLocalTeamId;
+	OnMarkersUpdated.Broadcast();
+}
+
+FGuid UOBNavigationSubsystem::RegisterOrUpdateMarker(const FOBNavigationMarkerSpec& MarkerSpec)
+{
+	FOBNavigationMarkerSpec ResolvedSpec = MarkerSpec;
+	ResolvedSpec.ConfigAsset = ResolveMarkerConfig(MarkerSpec);
+
+	if (!ResolvedSpec.ConfigAsset)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Failed to register marker: no config for marker type '%s'."),
+		       *GetName(), __FUNCTION__, *ResolvedSpec.MarkerType.ToString());
+		return FGuid();
+	}
+
+	if (!ResolvedSpec.MarkerId.IsValid() && ResolvedSpec.TrackedActor && TrackedActorToMarkerIDMap.Contains(ResolvedSpec.TrackedActor))
+	{
+		ResolvedSpec.MarkerId = TrackedActorToMarkerIDMap.FindRef(ResolvedSpec.TrackedActor);
+	}
+
+	const FGuid MarkerID = ResolvedSpec.MarkerId.IsValid() ? ResolvedSpec.MarkerId : FGuid::NewGuid();
+	ResolvedSpec.MarkerId = MarkerID;
+
+	if (UOBMapMarker* ExistingMarker = ActiveMarkersMap.FindRef(MarkerID))
+	{
+		if (ExistingMarker->TrackedActor.IsValid() && ExistingMarker->TrackedActor.Get() != ResolvedSpec.TrackedActor)
+		{
+			TrackedActorToMarkerIDMap.Remove(ExistingMarker->TrackedActor.Get());
+		}
+
+		ExistingMarker->ApplySpec(ResolvedSpec);
+		if (ResolvedSpec.TrackedActor)
+		{
+			TrackedActorToMarkerIDMap.Add(ResolvedSpec.TrackedActor, MarkerID);
+		}
+	}
+	else
+	{
+		UOBMapMarker* NewMarker = NewObject<UOBMapMarker>(this);
+		NewMarker->InitFromSpec(ResolvedSpec);
+		ActiveMarkersMap.Add(MarkerID, NewMarker);
+		if (ResolvedSpec.TrackedActor)
+		{
+			TrackedActorToMarkerIDMap.Add(ResolvedSpec.TrackedActor, MarkerID);
+		}
+	}
+
+	RebuildActiveMarkersArray();
+	OnMarkersUpdated.Broadcast();
+	return MarkerID;
+}
+
+void UOBNavigationSubsystem::UnregisterMarker(const FGuid& MarkerID)
+{
+	if (UnregisterMarkerInternal(MarkerID))
+	{
+		RebuildActiveMarkersArray();
+		OnMarkersUpdated.Broadcast();
+	}
+}
+
 FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig,
                                                 const FName InLayerName, const FVector InStaticLocation)
 {
@@ -72,66 +163,20 @@ FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarke
 		return FGuid(); // Return invalid Guid
 	}
 
-	if (InTrackedActor && TrackedActorToMarkerIDMap.Contains(InTrackedActor))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Actor '%s' already has a registered marker. Skipping."), *GetName(), __FUNCTION__, *InTrackedActor->GetName());
-		return TrackedActorToMarkerIDMap.FindRef(InTrackedActor);
-	}
-
-	// Create a new marker object
-	UOBMapMarker* NewMarker = NewObject<UOBMapMarker>(this);
-	const FGuid NewGuid = FGuid::NewGuid();
-
-	NewMarker->Init(NewGuid, InTrackedActor, InConfig, InLayerName, InStaticLocation);
-
-	// Add to our map and broadcast changes
-	ActiveMarkersMap.Add(NewGuid, NewMarker);
-	if (InTrackedActor)
-	{
-		TrackedActorToMarkerIDMap.Add(InTrackedActor, NewGuid);
-	}
-
-	RebuildActiveMarkersArray();
-	OnMarkersUpdated.Broadcast();
-
-	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Registered new marker with ID: %s"), *GetName(), __FUNCTION__,
-	       *NewGuid.ToString());
-
-	return NewGuid;
+	FOBNavigationMarkerSpec Spec;
+	Spec.TrackedActor = InTrackedActor;
+	Spec.ConfigAsset = InConfig;
+	Spec.LayerName = InLayerName;
+	Spec.WorldLocation = InStaticLocation;
+	Spec.WorldRotation = InTrackedActor ? InTrackedActor->GetActorRotation() : FRotator::ZeroRotator;
+	Spec.LifeTime = InConfig ? InConfig->LifeTime : 0.0f;
+	Spec.VisibilityPolicy = EOBMarkerVisibilityPolicy::Public;
+	return RegisterOrUpdateMarker(Spec);
 }
 
 void UOBNavigationSubsystem::UnregisterMapMarker(const FGuid& MarkerID)
 {
-	if (!MarkerID.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Attempted to unregister an invalid marker ID."), *GetName(),
-		       __FUNCTION__);
-		return;
-	}
-
-	// Tìm marker trước khi xóa
-	if (const auto FoundMarkerPtr = ActiveMarkersMap.Find(MarkerID))
-	{
-		if (const UOBMapMarker* MarkerToRemove = *FoundMarkerPtr; MarkerToRemove && MarkerToRemove->TrackedActor.IsValid())
-		{
-			// Xóa khỏi map tra cứu ngược
-			TrackedActorToMarkerIDMap.Remove(MarkerToRemove->TrackedActor.Get());
-		}
-	}
-
-	if (ActiveMarkersMap.Remove(MarkerID) > 0)
-	{
-		// If removal was successful, update the cached array and notify the UI
-		RebuildActiveMarkersArray();
-		OnMarkersUpdated.Broadcast();
-		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Unregistered marker with ID: %s"), *GetName(), __FUNCTION__,
-		       *MarkerID.ToString());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Could not find marker with ID to unregister: %s"), *GetName(),
-		       __FUNCTION__, *MarkerID.ToString());
-	}
+	UnregisterMarker(MarkerID);
 }
 
 FGuid UOBNavigationSubsystem::GetMarkerIDForActor(AActor* InActor) const
@@ -149,19 +194,32 @@ void UOBNavigationSubsystem::RebuildActiveMarkersArray()
 	ActiveMarkers.Empty();
 	// Re-populate the array with the current values from the map
 	ActiveMarkersMap.GenerateValueArray(ActiveMarkers);
+	ActiveMarkers.Sort([](const UOBMapMarker& A, const UOBMapMarker& B)
+	{
+		return A.SortPriority > B.SortPriority;
+	});
 }
 
 bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation,
                                           FVector2D& OutMapUV) const
 {
+	EOBMapProjectionResult Result = EOBMapProjectionResult::NoLayer;
+	return WorldToMapUVChecked(MapLayer, WorldLocation, OutMapUV, Result);
+}
+
+bool UOBNavigationSubsystem::WorldToMapUVChecked(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation,
+                                                 FVector2D& OutMapUV, EOBMapProjectionResult& OutResult) const
+{
 	if (!MapLayer)
 	{
+		OutResult = EOBMapProjectionResult::NoLayer;
 		return false;
 	}
 
 	const FBox& Bounds = MapLayer->WorldBounds;
 	if (!Bounds.IsInsideXY(WorldLocation))
 	{
+		OutResult = EOBMapProjectionResult::OutsideLayer;
 		return false;
 	}
 
@@ -170,6 +228,7 @@ bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, cons
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - MapLayer '%s' has zero size on X or Y axis."), *GetName(),
 		       __FUNCTION__, *MapLayer->GetName());
+		OutResult = EOBMapProjectionResult::InvalidBounds;
 		return false;
 	}
 
@@ -191,7 +250,7 @@ bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, cons
 	// 		TEXT("[WorldToMapUV] WorldLoc: %s -> UV: %s"), *WorldLocation.ToString(), *OutMapUV.ToString());
 	// 	GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Green, DebugMsg);
 	// }
-
+	OutResult = EOBMapProjectionResult::Projected;
 	return true;
 }
 
@@ -309,16 +368,87 @@ void UOBNavigationSubsystem::UpdateAllMarkers(const float DeltaTime)
 	{
 		for (const FGuid& MarkerID : MarkersToRemove)
 		{
-			// Use the existing Unregister function, but we can optimize by not broadcasting for every single one.
-			if (ActiveMarkersMap.Remove(MarkerID) > 0)
-			{
-				UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Automatically unregistered marker with ID: %s"), *GetName(),
-				       __FUNCTION__, *MarkerID.ToString());
-			}
+			UnregisterMarkerInternal(MarkerID);
 		}
 
 		// After removing, rebuild the array and broadcast a single update.
 		RebuildActiveMarkersArray();
 		OnMarkersUpdated.Broadcast();
 	}
+}
+
+bool UOBNavigationSubsystem::UnregisterMarkerInternal(const FGuid& MarkerID)
+{
+	if (!MarkerID.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Attempted to unregister an invalid marker ID."), *GetName(),
+		       __FUNCTION__);
+		return false;
+	}
+
+	if (const UOBMapMarker* MarkerToRemove = ActiveMarkersMap.FindRef(MarkerID))
+	{
+		if (MarkerToRemove->TrackedActor.IsValid())
+		{
+			TrackedActorToMarkerIDMap.Remove(MarkerToRemove->TrackedActor.Get());
+		}
+	}
+
+	const bool bRemoved = ActiveMarkersMap.Remove(MarkerID) > 0;
+	if (!bRemoved)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Could not find marker with ID to unregister: %s"), *GetName(),
+		       __FUNCTION__, *MarkerID.ToString());
+	}
+	return bRemoved;
+}
+
+bool UOBNavigationSubsystem::IsMarkerVisibleForLocalPlayer(const UOBMapMarker* Marker) const
+{
+	if (!Marker)
+	{
+		return false;
+	}
+
+	switch (Marker->VisibilityPolicy)
+	{
+	case EOBMarkerVisibilityPolicy::LocalOnly:
+		return Marker->OwnerPlayerId == INDEX_NONE || Marker->OwnerPlayerId == LocalPlayerId;
+	case EOBMarkerVisibilityPolicy::SquadOnly:
+		return Marker->TeamId != INDEX_NONE && Marker->TeamId == LocalTeamId;
+	case EOBMarkerVisibilityPolicy::Public:
+		return true;
+	case EOBMarkerVisibilityPolicy::DebugOnly:
+		return bShowDebugMarkers;
+	default:
+		return false;
+	}
+}
+
+UOBMarkerConfigAsset* UOBNavigationSubsystem::ResolveMarkerConfig(const FOBNavigationMarkerSpec& MarkerSpec) const
+{
+	if (MarkerSpec.ConfigAsset)
+	{
+		return MarkerSpec.ConfigAsset;
+	}
+
+	if (MarkerSpec.MarkerType.IsValid())
+	{
+		return MarkerConfigsByTag.FindRef(MarkerSpec.MarkerType);
+	}
+
+	return nullptr;
+}
+
+TArray<UOBMapMarker*> UOBNavigationSubsystem::GetVisibleMarkers(const EOBNavigationSurface Surface) const
+{
+	TArray<UOBMapMarker*> Result;
+	for (UOBMapMarker* Marker : ActiveMarkers)
+	{
+		if (Marker && Marker->IsVisibleOnSurface(Surface) && IsMarkerVisibleForLocalPlayer(Marker))
+		{
+			Result.Add(Marker);
+		}
+	}
+	return Result;
 }

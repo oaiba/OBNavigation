@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "OBNavigationTypes.h"
 #include "UObject/Object.h"
 #include "OBMapMarker.generated.h"
 
@@ -103,6 +104,24 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category="Marker")
 	FName MarkerLayerName;
 
+	UPROPERTY(BlueprintReadOnly, Category="Marker")
+	FGameplayTag MarkerType;
+
+	UPROPERTY(BlueprintReadOnly, Category="Marker")
+	FRotator WorldRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(BlueprintReadOnly, Category="Marker")
+	int32 OwnerPlayerId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category="Marker")
+	int32 TeamId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category="Marker")
+	EOBMarkerVisibilityPolicy VisibilityPolicy = EOBMarkerVisibilityPolicy::Public;
+
+	UPROPERTY(BlueprintReadOnly, Category="Marker")
+	int32 SortPriority = 0;
+
 	// Remaining lifetime for temporary markers (e.g., pings)
 	UPROPERTY(BlueprintReadOnly, Category="Marker")
 	float CurrentLifeTime;
@@ -111,6 +130,12 @@ public:
 	void Init(const FGuid& InID, AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName,
 	          FVector InStaticLocation = FVector::ZeroVector);
 
+	void InitFromSpec(const FOBNavigationMarkerSpec& InSpec);
+
+	void ApplySpec(const FOBNavigationMarkerSpec& InSpec);
+
 	// Updates the marker's world location (if tracking an actor)
 	void UpdateLocation();
+
+	bool IsVisibleOnSurface(EOBNavigationSurface Surface) const;
 };

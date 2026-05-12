@@ -5,6 +5,7 @@
 
 #include "OBNavigationSubsystem.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/PlayerState.h"
 
 
 UOBNavigationComponent::UOBNavigationComponent()
@@ -76,8 +77,18 @@ void UOBNavigationComponent::RegisterCharacterMarker()
 	// Ensure we only register once
 	if (!CharacterMarkerID.IsValid())
 	{
-		CharacterMarkerID = NavSubsystem->RegisterMapMarker(GetOwner(), CharacterMapMarkerConfig,
-															CharacterMapMarkerLayerName);
+			const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+			FOBNavigationMarkerSpec Spec;
+			Spec.MarkerId = CharacterMarkerID;
+			Spec.TrackedActor = GetOwner();
+			Spec.ConfigAsset = CharacterMapMarkerConfig;
+			Spec.LayerName = CharacterMapMarkerLayerName;
+			Spec.WorldLocation = GetOwner()->GetActorLocation();
+			Spec.WorldRotation = GetOwner()->GetActorRotation();
+			Spec.VisibilityPolicy = EOBMarkerVisibilityPolicy::LocalOnly;
+			Spec.OwnerPlayerId = OwnerPawn && OwnerPawn->GetPlayerState() ? OwnerPawn->GetPlayerState()->GetPlayerId() : INDEX_NONE;
+			Spec.SortPriority = 100;
+			CharacterMarkerID = NavSubsystem->RegisterOrUpdateMarker(Spec);
 		if (CharacterMarkerID.IsValid())
 		{
 			UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Registered character marker for '%s' (ID: %s)."), *GetName(),
@@ -114,10 +125,5 @@ bool UOBNavigationComponent::ShouldRegisterCharacterMarker() const
 	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
 	if (!OwnerCharacter) return false;
 
-	// For all clients, if the character is an AI or another player (Remote or Autonomous Proxy)
-	// it should register its marker so its location appears on the map for local players.
-	// For the owning client, the local player's character should also register its marker
-	// so it appears on its own map.
-	// So, we basically register for all characters that exist on any client.
-	return true; // Simplified for now. Can be expanded with more complex logic.
+	return OwnerCharacter->IsLocallyControlled();
 }

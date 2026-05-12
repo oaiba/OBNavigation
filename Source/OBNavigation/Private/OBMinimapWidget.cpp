@@ -30,6 +30,7 @@ void UOBMinimapWidget::InitializeAndStartTracking(UOBMinimapConfigAsset* InConfi
 	// --- 1. COPY CONFIG VALUES TO INTERNAL STATE ---
 	CurrentMapRotationOffset = ConfigAsset->MapRotationOffset;
 	CurrentMinimapShape = ConfigAsset->MinimapShape;
+	CurrentZoom = ConfigAsset->Zoom;
 
 	// --- 2. SETUP VISUAL ASSETS FROM CONFIG ---
 	if (MapImage && ConfigAsset->MinimapBackgroundMaterial)
@@ -77,6 +78,7 @@ void UOBMinimapWidget::InitializeAndStartTracking(UOBMinimapConfigAsset* InConfi
 	// --- 4. APPLY INITIAL SETTINGS FROM COPIED STATE ---
 	SetMapRotationOffset(CurrentMapRotationOffset);
 	SetMinimapShape(CurrentMinimapShape);
+	SetMinimapZoom(CurrentZoom);
 
 	// --- 5. VALIDATE AND START ---
 	if (!MinimapMaterialInstance || !NavSubsystem)
@@ -117,6 +119,17 @@ void UOBMinimapWidget::SetMinimapShape(const EMinimapShape NewShape)
 	}
 }
 
+void UOBMinimapWidget::SetMinimapZoom(const float NewZoom)
+{
+	const float MinZoom = ConfigAsset ? ConfigAsset->MinZoom : 0.1f;
+	const float MaxZoom = ConfigAsset ? ConfigAsset->MaxZoom : 100.0f;
+	CurrentZoom = FMath::Clamp(NewZoom, MinZoom, MaxZoom);
+	if (MinimapMaterialInstance)
+	{
+		MinimapMaterialInstance->SetScalarParameterValue("Zoom", CurrentZoom);
+	}
+}
+
 void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
@@ -126,10 +139,27 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 
 	const APawn* TrackedPawn = NavSubsystem->GetTrackedPlayerPawn();
 	const UOBMapLayerAsset* CurrentLayer = NavSubsystem->GetCurrentMinimapLayer();
+	if (!CurrentLayer)
+	{
+		for (const auto& Pair : ActiveMinimapMarkerWidgets)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->RemoveFromParent();
+			}
+		}
+		ActiveMinimapMarkerWidgets.Reset();
+		return;
+	}
+
 	const float AlignmentAngle = GetAlignmentAngle();
 	const float TotalStaticRotation = CurrentMapRotationOffset + AlignmentAngle;
 	const float CharacterWorldYaw = TrackedPawn->GetActorRotation().Yaw; // Tính một lần ở đây
 	float DynamicMapYaw = 0.0f;
+	if (!PlayerMarkerID.IsValid())
+	{
+		PlayerMarkerID = NavSubsystem->GetMarkerIDForActor(const_cast<APawn*>(TrackedPawn));
+	}
 
 	// --- MINIMAP MATERIAL LOGIC ---
 	if (CurrentLayer && MinimapMaterialInstance)
@@ -152,7 +182,7 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 				}
 			}
 			MinimapMaterialInstance->SetScalarParameterValue("PlayerYaw", FMath::DegreesToRadians(DynamicMapYaw));
-			MinimapMaterialInstance->SetScalarParameterValue("Zoom", ConfigAsset->Zoom);
+				MinimapMaterialInstance->SetScalarParameterValue("Zoom", CurrentZoom);
 
 			// Set STATIC rotation (always applied) - DÒNG NÀY BỊ THIẾU TRONG CODE CŨ CỦA BẠN
 			MinimapMaterialInstance->SetScalarParameterValue("MapRotationOffsetRad",
@@ -216,6 +246,25 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	}
 }
 
+void UOBMinimapWidget::NativeDestruct()
+{
+	if (NavSubsystem)
+	{
+		NavSubsystem->OnMinimapLayerChanged.RemoveDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
+	}
+
+	for (const auto& Pair : ActiveMinimapMarkerWidgets)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->RemoveFromParent();
+		}
+	}
+	ActiveMinimapMarkerWidgets.Reset();
+
+	Super::NativeDestruct();
+}
+
 void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const float InTotalStaticRotation,
                                             TSet<FGuid>& OutHandledMarkerIDs)
 {
@@ -230,14 +279,28 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 	const float MinimapRadius = FMath::Min(CanvasCenter.X, CanvasCenter.Y);
 
 	FVector2D PlayerUV;
-	NavSubsystem->WorldToMapUV(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV);
-
-	for (UOBMapMarker* Marker : NavSubsystem->GetAllActiveMarkers())
+	EOBMapProjectionResult PlayerProjectionResult = EOBMapProjectionResult::NoLayer;
+	if (!NavSubsystem->WorldToMapUVChecked(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV, PlayerProjectionResult))
 	{
-		// SỬA LẠI ĐIỀU KIỆN LỌC: BÂY GIỜ CHỈ CẦN LỌC MINIMAP
-		if (!Marker || !Marker->ConfigAsset || !Marker->ConfigAsset->Visibility.bShowOnMinimap)
+		return;
+	}
+
+	for (UOBMapMarker* Marker : NavSubsystem->GetVisibleMarkers(EOBNavigationSurface::Minimap))
+	{
+		if (!Marker || !Marker->ConfigAsset)
 		{
 			continue;
+		}
+
+		const bool bIsPlayerMarker = Marker->MarkerID == PlayerMarkerID;
+		FVector2D MarkerUV;
+		if (!bIsPlayerMarker)
+		{
+			EOBMapProjectionResult MarkerProjectionResult = EOBMapProjectionResult::NoLayer;
+			if (!NavSubsystem->WorldToMapUVChecked(CurrentLayer, Marker->WorldLocation, MarkerUV, MarkerProjectionResult))
+			{
+				continue;
+			}
 		}
 
 		OutHandledMarkerIDs.Add(Marker->MarkerID);
@@ -266,9 +329,10 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 		// --- START: REPLACEMENT LOGIC FOR POSITION AND ROTATION ---
 		FVector2D FinalPosition;
 		float IndicatorAngle = 0.0f;
+		bool bIsClampedToEdge = false;
 
 		// This block now correctly handles all rotation cases based on map type
-		if (Marker->MarkerID == PlayerMarkerID)
+		if (bIsPlayerMarker)
 		{
 			// The player is always in the center.
 			FinalPosition = CanvasCenter;
@@ -289,11 +353,8 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 		else
 		{
 			// Logic for all other markers (NPCs, objectives, etc.)
-			FVector2D MarkerUV;
-			NavSubsystem->WorldToMapUV(CurrentLayer, Marker->WorldLocation, MarkerUV);
-
 			const FVector2D UVDifference = MarkerUV - PlayerUV;
-			const FVector2D PixelOffset = UVDifference * CanvasSize * ConfigAsset->Zoom;
+			const FVector2D PixelOffset = UVDifference * CanvasSize * CurrentZoom;
 			FVector2D RotatedPixelOffset;
 
 			// This part correctly calculates the marker's position on the canvas
@@ -325,17 +386,14 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 				const FVector2D ClampedOffset = RotatedPixelOffset.GetSafeNormal() * MinimapRadius;
 				FinalPosition = CanvasCenter + ClampedOffset;
 				IndicatorAngle = FMath::RadiansToDegrees(FMath::Atan2(RotatedPixelOffset.Y, RotatedPixelOffset.X));
+				bIsClampedToEdge = true;
 			}
 			else
 			{
 				// CASE 2: The marker is visible inside the minimap.
 				FinalPosition = CanvasCenter + RotatedPixelOffset;
 
-				float ActorWorldYaw = 0.0f; // Default for static markers (points to World North +X)
-				if (Marker->TrackedActor.IsValid())
-				{
-					ActorWorldYaw = Marker->TrackedActor->GetActorRotation().Yaw;
-				}
+				const float ActorWorldYaw = Marker->WorldRotation.Yaw;
 
 				if (ConfigAsset->bShouldRotateMap)
 				{
@@ -361,6 +419,8 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 		// --- END: REPLACEMENT LOGIC ---
 
 		MarkerWidget->UpdateVisuals(IndicatorAngle, 90.0f, 1.0f);
+		MarkerWidget->UpdateDistance(FVector::Dist(TrackedPawn->GetActorLocation(), Marker->WorldLocation) / 100.0f,
+		                             bIsClampedToEdge);
 
 		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(MarkerWidget->Slot))
 		{
@@ -371,7 +431,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			const FVector2D MarkerSize = Marker->ConfigAsset->Size;
 			FVector2D SlotPosition;
 
-			if (Marker->MarkerID == PlayerMarkerID)
+			if (bIsPlayerMarker)
 			{
 				SlotPosition = FinalPosition;
 			}
@@ -388,14 +448,14 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			// This overrides any incorrect default layout size from the Blueprint and fixes the distortion.
 			CanvasSlot->SetSize(MarkerSize);
 			CanvasSlot->SetPosition(SlotPosition);
-			CanvasSlot->SetZOrder(Marker->MarkerID == PlayerMarkerID ? 10 : 1);
+			CanvasSlot->SetZOrder(bIsPlayerMarker ? 10 : 1);
 
 			// --- FIX ENDS HERE ---
 		}
 
 		if (GEngine && ConfigAsset->bShowDebugMessages)
 		{
-			const FColor DebugColor = (Marker->MarkerID == PlayerMarkerID) ? FColor::Magenta : FColor::Green;
+			const FColor DebugColor = bIsPlayerMarker ? FColor::Magenta : FColor::Green;
 			GEngine->AddOnScreenDebugMessage(
 				-1, 0.0f, DebugColor,
 				FString::Printf(TEXT("Marker [%s]: Final Pos: %s"),
@@ -405,7 +465,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 			);
 		}
 
-		if (GEngine && ConfigAsset->bShowDebugMessages && Marker->MarkerID == PlayerMarkerID)
+		if (GEngine && ConfigAsset->bShowDebugMessages && bIsPlayerMarker)
 		{
 			GEngine->AddOnScreenDebugMessage(
 				-1, 0.0f, FColor::White,

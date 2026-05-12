@@ -4,6 +4,7 @@
 #include "Widget/OBMapMarkerWidget.h"
 
 #include "Components/Image.h"
+#include "Components/TextBlock.h"
 
 void UOBMapMarkerWidget::InitializeMarker(UTexture2D* IdentifierTexture, UMaterialInterface* IndicatorMaterial)
 {
@@ -48,6 +49,24 @@ void UOBMapMarkerWidget::UpdateVisuals(const float IndicatorAngle, const float I
 		FOVMaterialInstance->SetScalarParameterValue("ViewAngle", InViewAngle);
 		FOVMaterialInstance->SetScalarParameterValue("ViewDistance", InViewDistance);
 	}
+}
+
+void UOBMapMarkerWidget::UpdateDistance(const float DistanceMeters, const bool bIsClampedToEdge)
+{
+	if (!DistanceText)
+	{
+		return;
+	}
+
+	if (DistanceMeters <= 0.0f)
+	{
+		DistanceText->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	DistanceText->SetText(FText::Format(NSLOCTEXT("OBNavigation", "MarkerDistanceMeters", "{0} m"),
+	                                    FText::AsNumber(FMath::RoundToInt(DistanceMeters))));
+	DistanceText->SetVisibility(bIsClampedToEdge ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 void UOBMapMarkerWidget::NativePreConstruct()

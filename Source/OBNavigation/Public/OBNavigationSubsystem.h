@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "OBMapMarker.h"
+#include "OBNavigationTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "OBNavigationSubsystem.generated.h"
 
@@ -32,6 +33,10 @@ public:
 
 	// Sets the pawn that the subsystem should track for local minimap display
 	void SetTrackedPlayerPawn(APawn* PlayerPawn);
+
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation")
+	void SetLocalNavigationContext(int32 InLocalPlayerId, int32 InLocalTeamId);
+
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Minimap")
 	UOBMapLayerAsset* GetCurrentMinimapLayer() const { return CurrentMinimapLayer; }
 
@@ -40,6 +45,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
 	FGuid GetMarkerIDForActor(AActor* InActor) const;
+
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Markers")
+	FGuid RegisterOrUpdateMarker(const FOBNavigationMarkerSpec& MarkerSpec);
+
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Markers")
+	void UnregisterMarker(const FGuid& MarkerID);
 
 	/**
 	 * @brief Registers a new marker.
@@ -64,9 +75,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
 	const TArray<UOBMapMarker*>& GetAllActiveMarkers() const { return ActiveMarkers; }
 
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
+	TArray<UOBMapMarker*> GetVisibleMarkers(EOBNavigationSurface Surface) const;
+
 	// Utility to convert world location to map UV
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Utilities")
 	bool WorldToMapUV(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation, FVector2D& OutMapUV) const;
+
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|Utilities")
+	bool WorldToMapUVChecked(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation, FVector2D& OutMapUV,
+	                         EOBMapProjectionResult& OutResult) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "OBNavigation|Delegates")
 	FOnMinimapLayerChanged OnMinimapLayerChanged;
@@ -78,8 +96,12 @@ protected:
 	bool Tick(float DeltaTime);
 
 private:
+	void LoadRegistryData();
 	void UpdateActiveMinimapLayer();
 	void UpdateAllMarkers(float DeltaTime);
+	bool UnregisterMarkerInternal(const FGuid& MarkerID);
+	bool IsMarkerVisibleForLocalPlayer(const UOBMapMarker* Marker) const;
+	UOBMarkerConfigAsset* ResolveMarkerConfig(const FOBNavigationMarkerSpec& MarkerSpec) const;
 
 	// All available map layer assets loaded at initialization
 	UPROPERTY()
@@ -88,6 +110,9 @@ private:
 	// All available markers config assets loaded at initialization (for a quick lookup)
 	UPROPERTY()
 	TMap<FName, TObjectPtr<UOBMarkerConfigAsset>> AllMarkerConfigs;
+
+	UPROPERTY()
+	TMap<FGameplayTag, TObjectPtr<UOBMarkerConfigAsset>> MarkerConfigsByTag;
 
 	TWeakObjectPtr<APawn> TrackedPlayerPawn;
 	UPROPERTY()
@@ -109,4 +134,8 @@ private:
 	// Reverse lookup map to quickly find a marker's ID from the actor it tracks.
 	UPROPERTY()
 	TMap<TObjectPtr<AActor>, FGuid> TrackedActorToMarkerIDMap;
+
+	int32 LocalPlayerId = INDEX_NONE;
+	int32 LocalTeamId = INDEX_NONE;
+	bool bShowDebugMarkers = false;
 };

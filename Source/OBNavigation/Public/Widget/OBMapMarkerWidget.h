@@ -7,6 +7,7 @@
 #include "OBMapMarkerWidget.generated.h"
 
 class UImage;
+class UTextBlock;
 class UTexture2D;
 /**
  * @class UOBMapMarkerWidget
@@ -46,6 +47,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Map Marker")
 	void UpdateVisuals(float IndicatorAngle, float InViewAngle, float InViewDistance);
 
+	UFUNCTION(BlueprintCallable, Category="Map Marker")
+	void UpdateDistance(float DistanceMeters, bool bIsClampedToEdge);
+
 
 protected:
 	// This function is called when the widget is constructed in the game.
@@ -65,6 +69,9 @@ protected:
 	 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> DirectionalIndicator;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> DistanceText;
 
 	// Dynamic material instance for the FOV cone here
 	UPROPERTY(Transient)

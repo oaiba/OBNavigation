@@ -82,6 +82,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings")
 	float Zoom = 5.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings", meta = (ClampMin = "0.1"))
+	float MinZoom = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings", meta = (ClampMin = "0.1"))
+	float MaxZoom = 12.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings")
 	EMinimapRotationSource RotationSource = EMinimapRotationSource::ActorRotation;
 

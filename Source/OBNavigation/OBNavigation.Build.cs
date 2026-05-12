@@ -22,13 +22,16 @@ public class OBNavigation : ModuleRules
 			);
 			
 		
-		PublicDependencyModuleNames.AddRange(
-			new string[]
-			{
-				"Core", "UMG",
-				// ... add other public dependencies that you statically link with here ...
-			}
-			);
+			PublicDependencyModuleNames.AddRange(
+				new string[]
+				{
+					"Core",
+					"DeveloperSettings",
+					"GameplayTags",
+					"UMG",
+					// ... add other public dependencies that you statically link with here ...
+				}
+				);
 			
 		
 		PrivateDependencyModuleNames.AddRange(

@@ -50,11 +50,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Minimap Settings")
 	void SetMinimapShape(EMinimapShape NewShape);
 
+	UFUNCTION(BlueprintCallable, Category = "Minimap Settings")
+	void SetMinimapZoom(float NewZoom);
+
+	UFUNCTION(BlueprintPure, Category = "Minimap Settings")
+	float GetMinimapZoom() const { return CurrentZoom; }
+
 	UFUNCTION(BlueprintPure, Category="Config")
 	UOBMinimapConfigAsset* GetConfig() const { return ConfigAsset; }
 
 protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void NativeDestruct() override;
 
 	// Called when the subsystem detects a map layer change
 	UFUNCTION()
@@ -109,6 +116,7 @@ private:
 	// This allows runtime changes (like SetMapRotationOffset) without modifying the asset
 	float CurrentMapRotationOffset = 0.0f;
 	EMinimapShape CurrentMinimapShape = EMinimapShape::Square;
+	float CurrentZoom = 1.0f;
 
 	FGuid PlayerMarkerID; // Store the player's own marker ID
 
