@@ -234,6 +234,14 @@ Ping safety is handled in `UPingComponent`:
 - Server validates owner player id, ping tag validity, distance from pawn, and cooldown.
 - Ping actors remain the replicated authoritative source; navigation only visualizes them.
 
+## Using With ExtractionCoreGame
+
+This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to `ExtractionCoreGame` systems such as `AExtractionHUD`, `UOverlayController_Navigation`, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
+
+- [`Navigation_Integration_Guide.md`](../ExtractionCoreGame/Source/ExtractionCoreGame/Docs/Navigation_Integration_Guide.md)
+
+Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only approved marker specs or source components to `UOBNavigationSubsystem`.
+
 ## Integration Guide
 
 1. Create map layer assets:

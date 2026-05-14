@@ -24,6 +24,9 @@ void UOBMapMarker::InitFromSpec(const FOBNavigationMarkerSpec& InSpec)
 
 void UOBMapMarker::ApplySpec(const FOBNavigationMarkerSpec& InSpec)
 {
+	const bool bHasAppliedSpec = ConfigAsset != nullptr || MarkerType.IsValid() || !MarkerLayerName.IsNone();
+	const float PreviousLifeTime = CurrentLifeTime;
+
 	TrackedActor = InSpec.TrackedActor;
 	ConfigAsset = InSpec.ConfigAsset;
 	MarkerLayerName = InSpec.LayerName;
@@ -32,7 +35,19 @@ void UOBMapMarker::ApplySpec(const FOBNavigationMarkerSpec& InSpec)
 	TeamId = InSpec.TeamId;
 	VisibilityPolicy = InSpec.VisibilityPolicy;
 	SortPriority = InSpec.SortPriority;
-	CurrentLifeTime = InSpec.LifeTime > 0.0f ? InSpec.LifeTime : (ConfigAsset ? ConfigAsset->LifeTime : 0.0f);
+	const float RequestedLifeTime = InSpec.LifeTime > 0.0f ? InSpec.LifeTime : (ConfigAsset ? ConfigAsset->LifeTime : 0.0f);
+	if (!bHasAppliedSpec)
+	{
+		CurrentLifeTime = RequestedLifeTime;
+	}
+	else if (RequestedLifeTime > 0.0f)
+	{
+		CurrentLifeTime = PreviousLifeTime > 0.0f ? PreviousLifeTime : RequestedLifeTime;
+	}
+	else
+	{
+		CurrentLifeTime = 0.0f;
+	}
 
 	if (TrackedActor.IsValid())
 	{
