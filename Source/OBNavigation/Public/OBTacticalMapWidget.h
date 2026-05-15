@@ -23,6 +23,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tactical Map")
 	FVector2D GetPanInput() const { return PanInput; }
 
+protected:
+	virtual EOBNavigationSurface GetNavigationSurface() const override { return EOBNavigationSurface::FullMap; }
+
 private:
 	UPROPERTY(Transient)
 	FVector2D PanInput = FVector2D::ZeroVector;

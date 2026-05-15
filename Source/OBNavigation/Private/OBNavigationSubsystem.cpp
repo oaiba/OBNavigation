@@ -5,7 +5,6 @@
 
 #include "OBNavigationDeveloperSettings.h"
 #include "OBNavigationMapRegistryAsset.h"
-#include "OBMapLayerAsset.h"
 
 void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -27,7 +26,6 @@ void UOBNavigationSubsystem::Deinitialize()
 
 void UOBNavigationSubsystem::LoadRegistryData()
 {
-	AllMapLayers.Reset();
 	AllMarkerConfigs.Reset();
 	MarkerConfigsByTag.Reset();
 	bShowDebugMarkers = false;
@@ -39,23 +37,10 @@ void UOBNavigationSubsystem::LoadRegistryData()
 	if (!Registry)
 	{
 		UE_LOG(LogTemp, Warning,
-		       TEXT("[%s::%hs] - No DefaultMapRegistry configured. OBNavigation will run, but map layers and marker tag lookup must be provided at runtime."),
+		       TEXT("[%s::%hs] - No DefaultMapRegistry configured. OBNavigation will run, but marker tag lookup must be provided at runtime."),
 		       *GetName(), __FUNCTION__);
 		return;
 	}
-
-	for (UOBMapLayerAsset* Layer : Registry->MapLayers)
-	{
-		if (Layer)
-		{
-			AllMapLayers.Add(Layer);
-		}
-	}
-
-	AllMapLayers.Sort([](const UOBMapLayerAsset& A, const UOBMapLayerAsset& B)
-	{
-		return A.Priority > B.Priority;
-	});
 
 	for (const FOBNavigationMarkerConfigEntry& Entry : Registry->MarkerConfigs)
 	{
@@ -66,8 +51,18 @@ void UOBNavigationSubsystem::LoadRegistryData()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Loaded %d map layers and %d marker configs from registry '%s'."),
-	       *GetName(), __FUNCTION__, AllMapLayers.Num(), MarkerConfigsByTag.Num(), *Registry->GetName());
+	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Loaded %d marker configs from registry '%s'."),
+	       *GetName(), __FUNCTION__, MarkerConfigsByTag.Num(), *Registry->GetName());
+}
+
+void UOBNavigationSubsystem::RebuildMapLayerSpecs()
+{
+	AllMapLayerSpecs.Reset();
+	AllMapLayerSpecs.Append(RuntimeMapLayerSpecs);
+	AllMapLayerSpecs.Sort([](const FOBNavigationMapLayerSpec& A, const FOBNavigationMapLayerSpec& B)
+	{
+		return A.Priority > B.Priority;
+	});
 }
 
 void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
@@ -83,8 +78,49 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 	else
 	{
 		TrackedPlayerPawn.Reset();
+		if (bHasCurrentMapLayerSpec)
+		{
+			CurrentMapLayerSpec = FOBNavigationMapLayerSpec();
+			bHasCurrentMapLayerSpec = false;
+			OnNavigationMapLayerSpecChanged.Broadcast(CurrentMapLayerSpec);
+		}
 		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Stopped tracking pawn."), *GetName(), __FUNCTION__);
 	}
+}
+
+bool UOBNavigationSubsystem::GetCurrentMapLayerSpec(FOBNavigationMapLayerSpec& OutLayerSpec) const
+{
+	if (!bHasCurrentMapLayerSpec)
+	{
+		OutLayerSpec = FOBNavigationMapLayerSpec();
+		return false;
+	}
+
+	OutLayerSpec = CurrentMapLayerSpec;
+	return true;
+}
+
+void UOBNavigationSubsystem::SetRuntimeMapLayers(const TArray<FOBNavigationMapLayerSpec>& InMapLayers)
+{
+	RuntimeMapLayerSpecs.Reset();
+	for (FOBNavigationMapLayerSpec LayerSpec : InMapLayers)
+	{
+		if (LayerSpec.LayerName.IsNone())
+		{
+			LayerSpec.LayerName = LayerSpec.MapTexture ? LayerSpec.MapTexture->GetFName() : NAME_None;
+		}
+		RuntimeMapLayerSpecs.Add(LayerSpec);
+	}
+
+	RebuildMapLayerSpecs();
+	UpdateActiveMinimapLayer();
+}
+
+void UOBNavigationSubsystem::ClearRuntimeMapLayers()
+{
+	RuntimeMapLayerSpecs.Reset();
+	RebuildMapLayerSpecs();
+	UpdateActiveMinimapLayer();
 }
 
 void UOBNavigationSubsystem::SetLocalNavigationContext(const int32 InLocalPlayerId, const int32 InLocalTeamId)
@@ -200,58 +236,17 @@ void UOBNavigationSubsystem::RebuildActiveMarkersArray()
 	});
 }
 
-bool UOBNavigationSubsystem::WorldToMapUV(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation,
-                                          FVector2D& OutMapUV) const
+bool UOBNavigationSubsystem::WorldToMapUVChecked(const FOBNavigationMapLayerSpec& MapLayerSpec,
+                                                 const FVector& WorldLocation, FVector2D& OutMapUV,
+                                                 EOBMapProjectionResult& OutResult) const
 {
-	EOBMapProjectionResult Result = EOBMapProjectionResult::NoLayer;
-	return WorldToMapUVChecked(MapLayer, WorldLocation, OutMapUV, Result);
-}
-
-bool UOBNavigationSubsystem::WorldToMapUVChecked(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation,
-                                                 FVector2D& OutMapUV, EOBMapProjectionResult& OutResult) const
-{
-	if (!MapLayer)
+	if (!MapLayerSpec.HasValidWorldBounds())
 	{
-		OutResult = EOBMapProjectionResult::NoLayer;
-		return false;
-	}
-
-	const FBox& Bounds = MapLayer->WorldBounds;
-	if (!Bounds.IsInsideXY(WorldLocation))
-	{
-		OutResult = EOBMapProjectionResult::OutsideLayer;
-		return false;
-	}
-
-	const FVector WorldSize = Bounds.GetSize();
-	if (FMath::IsNearlyZero(WorldSize.X) || FMath::IsNearlyZero(WorldSize.Y))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - MapLayer '%s' has zero size on X or Y axis."), *GetName(),
-		       __FUNCTION__, *MapLayer->GetName());
 		OutResult = EOBMapProjectionResult::InvalidBounds;
 		return false;
 	}
 
-	const double LocalX = WorldLocation.X - Bounds.Min.X;
-	const double LocalY = WorldLocation.Y - Bounds.Min.Y;
-
-	// STANDARD MAPPING:
-	// World +Y (Right) maps to the horizontal U coordinate.
-	OutMapUV.X = LocalY / WorldSize.Y;
-
-	// World +X (Forward/North) maps to the vertical V coordinate.
-	// We flip it so North (+X) is at the top of the map (V=0).
-	OutMapUV.Y = 1.0 - (LocalX / WorldSize.X);
-
-	// // --- DEBUG LOG ---
-	// if (GEngine)
-	// {
-	// 	const FString DebugMsg = FString::Printf(
-	// 		TEXT("[WorldToMapUV] WorldLoc: %s -> UV: %s"), *WorldLocation.ToString(), *OutMapUV.ToString());
-	// 	GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Green, DebugMsg);
-	// }
-	OutResult = EOBMapProjectionResult::Projected;
-	return true;
+	return MapLayerSpec.ProjectWorldToMapUVChecked(WorldLocation, OutMapUV, OutResult);
 }
 
 bool UOBNavigationSubsystem::Tick(float DeltaTime)
@@ -291,29 +286,45 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 {
 	if (!TrackedPlayerPawn.IsValid())
 	{
+		if (IsDifferentCurrentLayer(nullptr))
+		{
+			CurrentMapLayerSpec = FOBNavigationMapLayerSpec();
+			bHasCurrentMapLayerSpec = false;
+			OnNavigationMapLayerSpecChanged.Broadcast(CurrentMapLayerSpec);
+		}
 		return;
 	}
 
 	const FVector PawnLocation = TrackedPlayerPawn->GetActorLocation();
-	UOBMapLayerAsset* BestLayer = nullptr;
+	const FOBNavigationMapLayerSpec* BestLayerSpec = nullptr;
 
 	// Since the array is pre-sorted by priority, the first valid layer we find is the best one.
-	for (UOBMapLayerAsset* Layer : AllMapLayers)
+	for (const FOBNavigationMapLayerSpec& LayerSpec : AllMapLayerSpecs)
 	{
-		if (Layer && Layer->WorldBounds.IsInsideXY(PawnLocation))
+		if (LayerSpec.ContainsWorldLocationXY(PawnLocation))
 		{
-			BestLayer = Layer;
+			BestLayerSpec = &LayerSpec;
 			break; // Found the highest priority layer
 		}
 	}
 
 	// If the best layer has changed, update it and notify listeners
-	if (BestLayer != CurrentMinimapLayer)
+	if (IsDifferentCurrentLayer(BestLayerSpec))
 	{
-		CurrentMinimapLayer = BestLayer;
+		if (BestLayerSpec)
+		{
+			CurrentMapLayerSpec = *BestLayerSpec;
+			bHasCurrentMapLayerSpec = true;
+		}
+		else
+		{
+			CurrentMapLayerSpec = FOBNavigationMapLayerSpec();
+			bHasCurrentMapLayerSpec = false;
+		}
+
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Minimap layer changed to: %s"), *GetName(), __FUNCTION__,
-		       BestLayer ? *BestLayer->GetName() : TEXT("None"));
-		OnMinimapLayerChanged.Broadcast(CurrentMinimapLayer);
+		       BestLayerSpec ? *BestLayerSpec->LayerName.ToString() : TEXT("None"));
+		OnNavigationMapLayerSpecChanged.Broadcast(CurrentMapLayerSpec);
 	}
 }
 
@@ -451,4 +462,62 @@ TArray<UOBMapMarker*> UOBNavigationSubsystem::GetVisibleMarkers(const EOBNavigat
 		}
 	}
 	return Result;
+}
+
+TArray<FOBNavigationOverlayElement> UOBNavigationSubsystem::GetVisibleOverlayElements(
+	const EOBNavigationSurface Surface, const FName CategoryFilter, const FName TagFilter) const
+{
+	TArray<FOBNavigationOverlayElement> Result;
+	if (!bHasCurrentMapLayerSpec || Surface == EOBNavigationSurface::Compass)
+	{
+		return Result;
+	}
+
+	for (const FOBNavigationOverlayLayer& Layer : CurrentMapLayerSpec.OverlayLayers)
+	{
+		if (!Layer.bVisibleByDefault)
+		{
+			continue;
+		}
+
+		for (const FOBNavigationOverlayElement& Element : Layer.Elements)
+		{
+			if (!Element.bVisibleByDefault)
+			{
+				continue;
+			}
+			if (!CategoryFilter.IsNone() && Element.Category != CategoryFilter)
+			{
+				continue;
+			}
+			if (!TagFilter.IsNone() && !Element.FilterTags.Contains(TagFilter))
+			{
+				continue;
+			}
+
+			Result.Add(Element);
+		}
+	}
+
+	return Result;
+}
+
+bool UOBNavigationSubsystem::IsDifferentCurrentLayer(const FOBNavigationMapLayerSpec* NewLayerSpec) const
+{
+	if (!NewLayerSpec)
+	{
+		return bHasCurrentMapLayerSpec;
+	}
+
+	if (!bHasCurrentMapLayerSpec)
+	{
+		return true;
+	}
+
+	return CurrentMapLayerSpec.LayerName != NewLayerSpec->LayerName
+		|| CurrentMapLayerSpec.MapTexture != NewLayerSpec->MapTexture
+		|| CurrentMapLayerSpec.WorldBounds.Min != NewLayerSpec->WorldBounds.Min
+		|| CurrentMapLayerSpec.WorldBounds.Max != NewLayerSpec->WorldBounds.Max
+		|| CurrentMapLayerSpec.Priority != NewLayerSpec->Priority
+		|| !FMath::IsNearlyEqual(CurrentMapLayerSpec.MapRotationDegrees, NewLayerSpec->MapRotationDegrees);
 }

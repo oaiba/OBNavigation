@@ -5,7 +5,6 @@
 #include "GameplayTagContainer.h"
 #include "OBNavigationMapRegistryAsset.generated.h"
 
-class UOBMapLayerAsset;
 class UOBMarkerConfigAsset;
 
 USTRUCT(BlueprintType)
@@ -26,9 +25,6 @@ class OBNAVIGATION_API UOBNavigationMapRegistryAsset : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation")
-	TArray<TObjectPtr<UOBMapLayerAsset>> MapLayers;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation")
 	TArray<FOBNavigationMarkerConfigEntry> MarkerConfigs;
 };

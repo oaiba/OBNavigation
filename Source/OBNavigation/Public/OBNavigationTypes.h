@@ -6,6 +6,7 @@
 
 class AActor;
 class UOBMarkerConfigAsset;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class EOBNavigationSurface : uint8
@@ -31,6 +32,116 @@ enum class EOBMapProjectionResult : uint8
 	NoLayer,
 	OutsideLayer,
 	InvalidBounds
+};
+
+UENUM(BlueprintType)
+enum class EOBNavigationOverlayElementType : uint8
+{
+	Marker UMETA(DisplayName = "Marker"),
+	Zone UMETA(DisplayName = "Zone"),
+	Path UMETA(DisplayName = "Path"),
+	Freehand UMETA(DisplayName = "Freehand")
+};
+
+USTRUCT(BlueprintType)
+struct OBNAVIGATION_API FOBNavigationOverlayStyle
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FLinearColor Color = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	float Opacity = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	float LineWidth = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	TSoftObjectPtr<UTexture2D> Icon;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FVector2D IconSize = FVector2D(24.0f, 24.0f);
+};
+
+USTRUCT(BlueprintType)
+struct OBNAVIGATION_API FOBNavigationOverlayElement
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	EOBNavigationOverlayElementType Type = EOBNavigationOverlayElementType::Marker;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FName Id = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FText Label;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FName Category = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	TArray<FName> FilterTags;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	TArray<FVector> WorldPoints;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FOBNavigationOverlayStyle Style;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	bool bVisibleByDefault = true;
+};
+
+USTRUCT(BlueprintType)
+struct OBNAVIGATION_API FOBNavigationOverlayLayer
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	FName LayerName = TEXT("Default");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	bool bVisibleByDefault = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	TArray<FOBNavigationOverlayElement> Elements;
+};
+
+USTRUCT(BlueprintType)
+struct OBNAVIGATION_API FOBNavigationMapLayerSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	FName LayerName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	TObjectPtr<UTexture2D> MapTexture = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	FBox WorldBounds = FBox(ForceInit);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	FIntPoint OutputSize = FIntPoint::ZeroValue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	int32 Priority = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	float MapRotationDegrees = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	bool bClampQueriesToBounds = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Overlay")
+	TArray<FOBNavigationOverlayLayer> OverlayLayers;
+
+	bool HasValidWorldBounds() const;
+	bool ContainsWorldLocationXY(const FVector& WorldLocation) const;
+	bool ProjectWorldToMapUVChecked(const FVector& WorldLocation, FVector2D& OutMapUV,
+	                                EOBMapProjectionResult& OutResult) const;
 };
 
 USTRUCT(BlueprintType)

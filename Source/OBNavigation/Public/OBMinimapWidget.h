@@ -6,12 +6,13 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/CanvasPanel.h"
 #include "Data/OBMinimapConfigAsset.h"
+#include "OBNavigationTypes.h"
 #include "Widget/OBMapMarkerWidget.h"
 #include "OBMinimapWidget.generated.h"
 
 class UImage;
 class UOBNavigationSubsystem;
-class UOBMapLayerAsset;
+class UOBMapOverlayWidget;
 class UMaterialInstanceDynamic;
 class UOBMinimapConfigAsset;
 
@@ -63,9 +64,10 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual void NativeDestruct() override;
 
-	// Called when the subsystem detects a map layer change
 	UFUNCTION()
-	void OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer);
+	void OnNavigationMapLayerSpecChanged(FOBNavigationMapLayerSpec NewLayerSpec);
+
+	virtual EOBNavigationSurface GetNavigationSurface() const { return EOBNavigationSurface::Minimap; }
 
 	// --- WIDGET COMPONENTS ---
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
@@ -88,7 +90,13 @@ protected:
 private:
 	// Helper function to get the base rotation angle from the alignment enum.
 	float GetAlignmentAngle() const;
-	void UpdateMinimapMarkers(const APawn* TrackedPawn, float InTotalStaticRotation, TSet<FGuid>& OutHandledMarkerIDs);
+	float GetDynamicMapYaw(const APawn* TrackedPawn) const;
+	void UpdateMinimapMarkers(const APawn* TrackedPawn, const FOBNavigationMapLayerSpec& CurrentLayer,
+	                          float InTotalStaticRotation, TSet<FGuid>& OutHandledMarkerIDs);
+	void UpdateMapOverlays(const APawn* TrackedPawn, const FOBNavigationMapLayerSpec& CurrentLayer,
+	                       float InTotalStaticRotation, float InDynamicMapYaw);
+	void EnsureOverlayWidget();
+	void ClearMarkerWidgets();
 
 	// --- CACHED POINTERS ---
 	// Cached the pointer to our subsystem for quick access
@@ -103,6 +111,9 @@ private:
 	// A single map to hold all active marker widgets, regardless of where they are displayed.
 	UPROPERTY(Transient)
 	TMap<FGuid, TObjectPtr<UOBMapMarkerWidget>> ActiveMinimapMarkerWidgets; 
+
+	UPROPERTY(Transient)
+	TObjectPtr<UOBMapOverlayWidget> OverlayWidget = nullptr;
 	
 	// --- CONFIGURATION ---
 	// Configuration asset for visual resources. Set via InitializeAndStartTracking.

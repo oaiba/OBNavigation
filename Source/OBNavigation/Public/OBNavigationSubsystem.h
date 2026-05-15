@@ -8,11 +8,9 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "OBNavigationSubsystem.generated.h"
 
-class UOBMapLayerAsset;
 class UOBMarkerConfigAsset;
 
-// Delegate for broadcasting minimap layer changes
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMinimapLayerChanged, UOBMapLayerAsset*, NewLayer);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNavigationMapLayerSpecChanged, FOBNavigationMapLayerSpec, NewLayerSpec);
 
 // Delegate for broadcasting marker list changes
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnMarkersUpdated);
@@ -38,10 +36,16 @@ public:
 	void SetLocalNavigationContext(int32 InLocalPlayerId, int32 InLocalTeamId);
 
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Minimap")
-	UOBMapLayerAsset* GetCurrentMinimapLayer() const { return CurrentMinimapLayer; }
+	bool GetCurrentMapLayerSpec(FOBNavigationMapLayerSpec& OutLayerSpec) const;
 
 	UFUNCTION(BlueprintPure, Category = "OBNavigation")
 	APawn* GetTrackedPlayerPawn() const { return TrackedPlayerPawn.Get(); }
+
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Minimap")
+	void SetRuntimeMapLayers(const TArray<FOBNavigationMapLayerSpec>& InMapLayers);
+
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Minimap")
+	void ClearRuntimeMapLayers();
 
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
 	FGuid GetMarkerIDForActor(AActor* InActor) const;
@@ -78,16 +82,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
 	TArray<UOBMapMarker*> GetVisibleMarkers(EOBNavigationSurface Surface) const;
 
-	// Utility to convert world location to map UV
-	UFUNCTION(BlueprintPure, Category = "OBNavigation|Utilities")
-	bool WorldToMapUV(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation, FVector2D& OutMapUV) const;
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|Overlay")
+	TArray<FOBNavigationOverlayElement> GetVisibleOverlayElements(EOBNavigationSurface Surface,
+	                                                              FName CategoryFilter = NAME_None,
+	                                                              FName TagFilter = NAME_None) const;
 
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Utilities")
-	bool WorldToMapUVChecked(const UOBMapLayerAsset* MapLayer, const FVector& WorldLocation, FVector2D& OutMapUV,
-	                         EOBMapProjectionResult& OutResult) const;
+	bool WorldToMapUVChecked(const FOBNavigationMapLayerSpec& MapLayerSpec, const FVector& WorldLocation,
+	                         FVector2D& OutMapUV, EOBMapProjectionResult& OutResult) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "OBNavigation|Delegates")
-	FOnMinimapLayerChanged OnMinimapLayerChanged;
+	FOnNavigationMapLayerSpecChanged OnNavigationMapLayerSpecChanged;
 
 	UPROPERTY(BlueprintAssignable, Category = "OBNavigation|Delegates")
 	FOnMarkersUpdated OnMarkersUpdated; // Broadcast when markers are added/removed/updated
@@ -97,15 +102,19 @@ protected:
 
 private:
 	void LoadRegistryData();
+	void RebuildMapLayerSpecs();
 	void UpdateActiveMinimapLayer();
 	void UpdateAllMarkers(float DeltaTime);
 	bool UnregisterMarkerInternal(const FGuid& MarkerID);
 	bool IsMarkerVisibleForLocalPlayer(const UOBMapMarker* Marker) const;
 	UOBMarkerConfigAsset* ResolveMarkerConfig(const FOBNavigationMarkerSpec& MarkerSpec) const;
+	bool IsDifferentCurrentLayer(const FOBNavigationMapLayerSpec* NewLayerSpec) const;
 
-	// All available map layer assets loaded at initialization
 	UPROPERTY()
-	TArray<TObjectPtr<UOBMapLayerAsset>> AllMapLayers;
+	TArray<FOBNavigationMapLayerSpec> RuntimeMapLayerSpecs;
+
+	UPROPERTY()
+	TArray<FOBNavigationMapLayerSpec> AllMapLayerSpecs;
 
 	// All available markers config assets loaded at initialization (for a quick lookup)
 	UPROPERTY()
@@ -115,8 +124,11 @@ private:
 	TMap<FGameplayTag, TObjectPtr<UOBMarkerConfigAsset>> MarkerConfigsByTag;
 
 	TWeakObjectPtr<APawn> TrackedPlayerPawn;
+
 	UPROPERTY()
-	TObjectPtr<UOBMapLayerAsset> CurrentMinimapLayer;
+	FOBNavigationMapLayerSpec CurrentMapLayerSpec;
+
+	bool bHasCurrentMapLayerSpec = false;
 
 	// Store active markers in a TMap for faster lookup by FGuid
 	UPROPERTY()

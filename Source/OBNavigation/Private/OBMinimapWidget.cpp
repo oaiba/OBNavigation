@@ -5,9 +5,9 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "OBNavigationSubsystem.h"
-#include "OBMapLayerAsset.h"
 #include "Data/OBMinimapConfigAsset.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Widget/OBMapOverlayWidget.h"
 
 void UOBMinimapWidget::InitializeAndStartTracking(UOBMinimapConfigAsset* InConfigAsset)
 {
@@ -54,9 +54,11 @@ void UOBMinimapWidget::InitializeAndStartTracking(UOBMinimapConfigAsset* InConfi
 		NavSubsystem = GI->GetSubsystem<UOBNavigationSubsystem>();
 		if (NavSubsystem)
 		{
-			NavSubsystem->OnMinimapLayerChanged.AddDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
-			// Initial layer setup
-			OnMinimapLayerChanged(NavSubsystem->GetCurrentMinimapLayer());
+			NavSubsystem->OnNavigationMapLayerSpecChanged.AddDynamic(this, &UOBMinimapWidget::OnNavigationMapLayerSpecChanged);
+			FOBNavigationMapLayerSpec CurrentLayerSpec;
+			OnNavigationMapLayerSpecChanged(NavSubsystem->GetCurrentMapLayerSpec(CurrentLayerSpec)
+				                                ? CurrentLayerSpec
+				                                : FOBNavigationMapLayerSpec());
 
 			// --- LOGIC MỚI: TÌM KIẾM MARKER ID CỦA NGƯỜI CHƠI ---
 			if (APawn* TrackedPawn = NavSubsystem->GetTrackedPlayerPawn())
@@ -79,6 +81,7 @@ void UOBMinimapWidget::InitializeAndStartTracking(UOBMinimapConfigAsset* InConfi
 	SetMapRotationOffset(CurrentMapRotationOffset);
 	SetMinimapShape(CurrentMinimapShape);
 	SetMinimapZoom(CurrentZoom);
+	EnsureOverlayWidget();
 
 	// --- 5. VALIDATE AND START ---
 	if (!MinimapMaterialInstance || !NavSubsystem)
@@ -138,49 +141,37 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	if (!NavSubsystem || !NavSubsystem->GetTrackedPlayerPawn()) return;
 
 	const APawn* TrackedPawn = NavSubsystem->GetTrackedPlayerPawn();
-	const UOBMapLayerAsset* CurrentLayer = NavSubsystem->GetCurrentMinimapLayer();
-	if (!CurrentLayer)
+	FOBNavigationMapLayerSpec CurrentLayer;
+	if (!NavSubsystem->GetCurrentMapLayerSpec(CurrentLayer))
 	{
-		for (const auto& Pair : ActiveMinimapMarkerWidgets)
+		ClearMarkerWidgets();
+		if (OverlayWidget)
 		{
-			if (Pair.Value)
-			{
-				Pair.Value->RemoveFromParent();
-			}
+			OverlayWidget->ClearOverlayContext();
 		}
-		ActiveMinimapMarkerWidgets.Reset();
 		return;
 	}
 
 	const float AlignmentAngle = GetAlignmentAngle();
 	const float TotalStaticRotation = CurrentMapRotationOffset + AlignmentAngle;
 	const float CharacterWorldYaw = TrackedPawn->GetActorRotation().Yaw; // Tính một lần ở đây
-	float DynamicMapYaw = 0.0f;
+	const float DynamicMapYaw = GetDynamicMapYaw(TrackedPawn);
 	if (!PlayerMarkerID.IsValid())
 	{
 		PlayerMarkerID = NavSubsystem->GetMarkerIDForActor(const_cast<APawn*>(TrackedPawn));
 	}
 
 	// --- MINIMAP MATERIAL LOGIC ---
-	if (CurrentLayer && MinimapMaterialInstance)
+	if (MinimapMaterialInstance)
 	{
-		if (FVector2D PlayerUV; NavSubsystem->WorldToMapUV(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV))
+		FVector2D PlayerUV;
+		EOBMapProjectionResult PlayerProjectionResult = EOBMapProjectionResult::NoLayer;
+		if (NavSubsystem->WorldToMapUVChecked(CurrentLayer, TrackedPawn->GetActorLocation(), PlayerUV,
+		                                      PlayerProjectionResult))
 		{
 			MinimapMaterialInstance->SetVectorParameterValue("PlayerPositionUV",
 			                                                 FLinearColor(PlayerUV.X, PlayerUV.Y, 0.0f, 0.0f));
 
-			if (ConfigAsset->bShouldRotateMap)
-			{
-				switch (ConfigAsset->RotationSource)
-				{
-				case EMinimapRotationSource::ControlRotation:
-					DynamicMapYaw = TrackedPawn->GetControlRotation().Yaw;
-					break;
-				case EMinimapRotationSource::ActorRotation:
-					DynamicMapYaw = TrackedPawn->GetActorRotation().Yaw;
-					break;
-				}
-			}
 			MinimapMaterialInstance->SetScalarParameterValue("PlayerYaw", FMath::DegreesToRadians(DynamicMapYaw));
 				MinimapMaterialInstance->SetScalarParameterValue("Zoom", CurrentZoom);
 
@@ -189,12 +180,14 @@ void UOBMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 			                                                 FMath::DegreesToRadians(TotalStaticRotation));
 		}
 	}
+
+	UpdateMapOverlays(TrackedPawn, CurrentLayer, TotalStaticRotation, DynamicMapYaw);
 	TSet<FGuid> HandledMarkerIDs; // Keep track of markers processed in this frame
 
 	// --- Pass 1: MINIMAP MARKERS ---
 	if (MinimapMarkerCanvas)
 	{
-		UpdateMinimapMarkers(TrackedPawn, TotalStaticRotation, HandledMarkerIDs);
+		UpdateMinimapMarkers(TrackedPawn, CurrentLayer, TotalStaticRotation, HandledMarkerIDs);
 	}
 
 	// --- Pass 3: CLEANUP UNUSED WIDGETS ---
@@ -250,28 +243,25 @@ void UOBMinimapWidget::NativeDestruct()
 {
 	if (NavSubsystem)
 	{
-		NavSubsystem->OnMinimapLayerChanged.RemoveDynamic(this, &UOBMinimapWidget::OnMinimapLayerChanged);
+		NavSubsystem->OnNavigationMapLayerSpecChanged.RemoveDynamic(this, &UOBMinimapWidget::OnNavigationMapLayerSpecChanged);
 	}
 
-	for (const auto& Pair : ActiveMinimapMarkerWidgets)
+	ClearMarkerWidgets();
+	if (OverlayWidget)
 	{
-		if (Pair.Value)
-		{
-			Pair.Value->RemoveFromParent();
-		}
+		OverlayWidget->RemoveFromParent();
+		OverlayWidget = nullptr;
 	}
-	ActiveMinimapMarkerWidgets.Reset();
 
 	Super::NativeDestruct();
 }
 
-void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const float InTotalStaticRotation,
+void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn,
+                                            const FOBNavigationMapLayerSpec& CurrentLayer,
+                                            const float InTotalStaticRotation,
                                             TSet<FGuid>& OutHandledMarkerIDs)
 {
 	if (!MarkerWidgetClass || !NavSubsystem || !ConfigAsset) return;
-
-	const UOBMapLayerAsset* CurrentLayer = NavSubsystem->GetCurrentMinimapLayer();
-	if (!CurrentLayer) return;
 
 	const FVector2D CanvasSize = MinimapMarkerCanvas->GetCachedGeometry().GetLocalSize();
 	const FVector2D CanvasCenter = CanvasSize / 2.0f;
@@ -285,7 +275,7 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 		return;
 	}
 
-	for (UOBMapMarker* Marker : NavSubsystem->GetVisibleMarkers(EOBNavigationSurface::Minimap))
+	for (UOBMapMarker* Marker : NavSubsystem->GetVisibleMarkers(GetNavigationSurface()))
 	{
 		if (!Marker || !Marker->ConfigAsset)
 		{
@@ -475,22 +465,98 @@ void UOBMinimapWidget::UpdateMinimapMarkers(const APawn* TrackedPawn, const floa
 	}
 }
 
-void UOBMinimapWidget::OnMinimapLayerChanged(UOBMapLayerAsset* NewLayer)
+void UOBMinimapWidget::OnNavigationMapLayerSpecChanged(FOBNavigationMapLayerSpec NewLayerSpec)
 {
 	if (!MinimapMaterialInstance || !MapImage)
 	{
 		return;
 	}
 
-	if (NewLayer && NewLayer->MapTexture)
+	if (NewLayerSpec.MapTexture)
 	{
-		MinimapMaterialInstance->SetTextureParameterValue("MapTexture", NewLayer->MapTexture);
+		MinimapMaterialInstance->SetTextureParameterValue("MapTexture", NewLayerSpec.MapTexture);
 		MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	else
 	{
 		MapImage->SetVisibility(ESlateVisibility::Collapsed);
 	}
+}
+
+float UOBMinimapWidget::GetDynamicMapYaw(const APawn* TrackedPawn) const
+{
+	if (!ConfigAsset || !TrackedPawn || !ConfigAsset->bShouldRotateMap)
+	{
+		return 0.0f;
+	}
+
+	switch (ConfigAsset->RotationSource)
+	{
+	case EMinimapRotationSource::ControlRotation:
+		return TrackedPawn->GetControlRotation().Yaw;
+	case EMinimapRotationSource::ActorRotation:
+	default:
+		return TrackedPawn->GetActorRotation().Yaw;
+	}
+}
+
+void UOBMinimapWidget::UpdateMapOverlays(const APawn* TrackedPawn, const FOBNavigationMapLayerSpec& CurrentLayer,
+                                         const float InTotalStaticRotation, const float InDynamicMapYaw)
+{
+	if (!NavSubsystem || !TrackedPawn || !MinimapMarkerCanvas)
+	{
+		return;
+	}
+
+	EnsureOverlayWidget();
+	if (!OverlayWidget)
+	{
+		return;
+	}
+
+	OverlayWidget->SetOverlayContext(
+		CurrentLayer,
+		NavSubsystem->GetVisibleOverlayElements(GetNavigationSurface()),
+		TrackedPawn->GetActorLocation(),
+		CurrentZoom,
+		InTotalStaticRotation,
+		InDynamicMapYaw,
+		ConfigAsset && ConfigAsset->bShouldRotateMap);
+}
+
+void UOBMinimapWidget::EnsureOverlayWidget()
+{
+	if (OverlayWidget || !MinimapMarkerCanvas)
+	{
+		return;
+	}
+
+	OverlayWidget = CreateWidget<UOBMapOverlayWidget>(this, UOBMapOverlayWidget::StaticClass());
+	if (!OverlayWidget)
+	{
+		return;
+	}
+
+	OverlayWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UCanvasPanelSlot* OverlaySlot = Cast<UCanvasPanelSlot>(MinimapMarkerCanvas->AddChild(OverlayWidget)))
+	{
+		OverlaySlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		OverlaySlot->SetOffsets(FMargin(0.0f));
+		OverlaySlot->SetAlignment(FVector2D::ZeroVector);
+		OverlaySlot->SetZOrder(0);
+	}
+}
+
+void UOBMinimapWidget::ClearMarkerWidgets()
+{
+	for (const auto& Pair : ActiveMinimapMarkerWidgets)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->RemoveFromParent();
+		}
+	}
+	ActiveMinimapMarkerWidgets.Reset();
 }
 
 float UOBMinimapWidget::GetAlignmentAngle() const

@@ -2,7 +2,7 @@
 
 ## Overview
 
-**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides map layers, minimap/full-map marker projection, marker pooling, visibility policy filtering, and data-driven marker configuration. Multiplayer ownership, team, ping, extraction, and loot rules are supplied by game-specific bridge code such as `ExtractionCoreGame`'s `UOverlayController_Navigation`.
+**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Multiplayer ownership, team, ping, extraction, and loot rules are supplied by game-specific bridge code such as `ExtractionCoreGame`'s `UOverlayController_Navigation`.
 
 The current V1 target is a **multiplayer top-down extraction shooter**:
 
@@ -10,13 +10,15 @@ The current V1 target is a **multiplayer top-down extraction shooter**:
 - Squad-only teammate markers.
 - Squad ping markers driven by replicated ping actors.
 - Static or dynamic POI markers through `UOBNavigationSourceComponent`.
-- Data-driven map layers and marker configs through a registry asset.
+- Runtime map layers supplied as `FOBNavigationMapLayerSpec` data, normally converted from Panoramic minimap definitions by `ExtractionCoreGame`.
+- Data-driven marker configs through a registry asset.
 - No fog of war, path routing, or render-target map generation in this plugin.
 
 ## Key Features
 
-- **Central subsystem:** `UOBNavigationSubsystem` owns map layers, active marker objects, projection utilities, visibility filtering, and marker lifetime cleanup.
-- **Registry-driven setup:** `UOBNavigationMapRegistryAsset` lists map layers and marker configs keyed by `FGameplayTag`; `UOBNavigationDeveloperSettings` points the runtime to the default registry.
+- **Central subsystem:** `UOBNavigationSubsystem` owns runtime map layers, overlays, active marker objects, projection utilities, visibility filtering, and marker lifetime cleanup.
+- **Runtime map setup:** `SetRuntimeMapLayers` accepts `FOBNavigationMapLayerSpec` data. `ExtractionCoreGame` converts Panoramic `UMinimapDefinitionDataAsset` assets into those specs.
+- **Registry-driven marker setup:** `UOBNavigationMapRegistryAsset` lists marker configs keyed by `FGameplayTag`; `UOBNavigationDeveloperSettings` points the runtime to the default marker registry.
 - **Marker spec API:** `FOBNavigationMarkerSpec` supports marker type, tracked actor, static location, lifetime, owner player id, team id, visibility policy, and sort priority.
 - **Visibility policies:** `LocalOnly`, `SquadOnly`, `Public`, and `DebugOnly` prevent unwanted enemy markers from appearing by default.
 - **Cook-friendly asset loading:** runtime loads from configured soft references instead of scanning all assets with `AssetRegistry`.
@@ -28,7 +30,9 @@ The current V1 target is a **multiplayer top-down extraction shooter**:
 
 ```mermaid
 flowchart TD
-    Registry["UOBNavigationMapRegistryAsset"]
+    Registry["UOBNavigationMapRegistryAsset (marker configs)"]
+    Panoramic["Panoramic UMinimapDefinitionDataAsset"]
+    MapBridge["ExtractionCoreGame: UExtractionNavigationMapBridgeSubsystem"]
     Settings["UOBNavigationDeveloperSettings"]
     Subsystem["UOBNavigationSubsystem"]
     Source["UOBNavigationSourceComponent"]
@@ -42,6 +46,8 @@ flowchart TD
 
     Settings --> Registry
     Registry --> Subsystem
+    Panoramic --> MapBridge
+    MapBridge --> Subsystem
     NavComp --> Subsystem
     Source --> Subsystem
     Team --> Bridge
@@ -77,9 +83,13 @@ The subsystem is the runtime source of truth for local navigation UI.
 |---|---|
 | `SetTrackedPlayerPawn(APawn*)` | Sets the pawn the minimap follows. |
 | `SetLocalNavigationContext(int32 PlayerId, int32 TeamId)` | Sets local player/team context for visibility filtering. |
+| `SetRuntimeMapLayers(const TArray<FOBNavigationMapLayerSpec>&)` | Replaces the runtime map layer list. |
+| `ClearRuntimeMapLayers()` | Clears runtime map layers and hides map texture when no active layer remains. |
+| `GetCurrentMapLayerSpec(...)` | Returns the currently active runtime map layer spec. |
 | `RegisterOrUpdateMarker(const FOBNavigationMarkerSpec&)` | Adds or updates a marker. Returns a stable `FGuid`. |
 | `UnregisterMarker(const FGuid&)` | Removes a marker and its reverse actor lookup. |
 | `GetVisibleMarkers(EOBNavigationSurface)` | Returns markers visible on Minimap, FullMap, or Compass after policy filtering. |
+| `GetVisibleOverlayElements(EOBNavigationSurface, ...)` | Returns visible overlay marker/zone/path/freehand elements for map surfaces. |
 | `WorldToMapUVChecked(...)` | Converts world location to UV and returns a projection result enum. |
 | `RegisterMapMarker(...)` / `UnregisterMapMarker(...)` | Legacy Blueprint-compatible wrappers. Prefer the marker spec API for new work. |
 
@@ -132,18 +142,22 @@ Attach to the local player character/pawn for standard self-marker behavior. It 
 
 Create one registry asset for the project or per game mode/map family.
 
-- `MapLayers`: ordered at runtime by each layer's `Priority`.
 - `MarkerConfigs`: maps `FGameplayTag` marker types to `UOBMarkerConfigAsset`.
 
 Set the default registry in **Project Settings -> OB Navigation -> Default Map Registry**.
 
-### `UOBMapLayerAsset`
+### `FOBNavigationMapLayerSpec`
 
-Defines one map texture and its world bounds.
+Defines one runtime map texture, bounds, projection metadata, and overlay payload.
 
-- `MapTexture`: top-down texture used by the minimap material.
+- `MapTexture`: texture used by the minimap material.
 - `WorldBounds`: world-space `FBox`; X/Y define projection coverage.
+- `OutputSize`: source texture pixel dimensions.
 - `Priority`: higher priority wins when layers overlap.
+- `MapRotationDegrees`: rotation metadata from Panoramic capture.
+- `OverlayLayers`: marker, zone, path, and freehand overlay data.
+
+`OBNavigation` does not own editor capture or map asset generation. Use `OBPanoramicMinimapGenerator` to export `UMinimapDefinitionDataAsset`, then let `ExtractionCoreGame` convert it to runtime specs.
 
 ### `UOBMarkerConfigAsset`
 
@@ -219,12 +233,13 @@ Runtime methods:
 
 `ExtractionCoreGame` depends on `OBNavigation` and adds `UOverlayController_Navigation`.
 
-The controller bridges:
+CoreGame integration bridges:
 
 - `UOverlayController_Team` teammate snapshots -> squad-only teammate markers.
 - replicated `APingMarkerActor` instances -> squad-only ping markers.
 - local player/team context -> `UOBNavigationSubsystem::SetLocalNavigationContext`.
 - possessed pawn -> `UOBNavigationSubsystem::SetTrackedPlayerPawn`.
+- `UMinimapDefinitionDataAsset` map definitions -> `FOBNavigationMapLayerSpec` runtime layers.
 
 To use it, add `UOverlayController_Navigation` to the HUD's `OverlayControllerClasses` in the project/HUD Blueprint. Configure marker tags and optional direct marker config overrides on the controller.
 
@@ -244,10 +259,10 @@ Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only
 
 ## Integration Guide
 
-1. Create map layer assets:
-   - Create `UOBMapLayerAsset` assets.
-   - Assign `MapTexture`.
-   - Set `WorldBounds` accurately for the playable area.
+1. Create Panoramic minimap definitions:
+   - Use `OBPanoramicMinimapGenerator` to capture/export `UMinimapDefinitionDataAsset` assets.
+   - Ensure each definition has `BaseMapTexture`, valid `WorldBounds`, `OutputSize`, and overlay data if needed.
+   - Add those assets to **Project Settings -> Extraction Navigation -> Panoramic Map Layers**.
    - Use `Priority` for overlapping indoor/floor/zone maps.
 
 2. Create marker config assets:
@@ -259,7 +274,6 @@ Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only
 
 3. Create a registry asset:
    - Create `UOBNavigationMapRegistryAsset`.
-   - Add all map layers.
    - Add marker config entries keyed by gameplay tags.
    - Set it in **Project Settings -> OB Navigation -> Default Map Registry**.
 
@@ -305,11 +319,11 @@ Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only
 
 `WorldToMapUVChecked` maps world coordinates into 0-1 texture UV:
 
-- World `+Y` maps to horizontal `U`.
-- World `+X` maps to vertical `V`.
-- `V` is flipped so world `+X` appears at the top of the map by default.
+- World `+X` maps to horizontal `U`.
+- World `+Y` maps to vertical `V`, flipped to match Panoramic minimap output.
+- `MapRotationDegrees` is applied around the UV center.
 
-If your map texture is authored with a different up-axis, adjust `MapAlignment` and `MapRotationOffset` in `UOBMinimapConfigAsset`.
+If your map texture is authored with a different orientation, regenerate/update the Panoramic definition or adjust `MapAlignment` and `MapRotationOffset` in `UOBMinimapConfigAsset`.
 
 Projection results:
 
@@ -325,9 +339,9 @@ Widgets should skip or clamp markers only after checking the projection result. 
 - No fog of war.
 - No pathfinding or route drawing.
 - No shared drawn routes.
-- No render-target map capture.
+- No render-target map capture inside `OBNavigation`; map capture is handled by `OBPanoramicMinimapGenerator`.
 - Full tactical map interaction is a V1 base class with zoom/pan hooks, not a finished map screen.
-- Registry asset must be configured in Project Settings or marker tag lookup/map layers will be empty at runtime.
+- Registry asset must be configured in Project Settings for marker tag lookup. Map layers must be supplied through runtime specs, normally by `ExtractionCoreGame`.
 
 ## Build Verification
 
