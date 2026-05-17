@@ -17,6 +17,39 @@ class UOBNavigationSubsystem;
 
 /**
  * Displays the player-centered minimap and owns the shared map marker projection path.
+ *
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ *
+ *  +------------------[Root/Overlay]------------------+
+ *  |                                                  |
+ *  |  +---------------[MapImage]----------------+     |
+ *  |  |                                         |     |
+ *  |  |     (Dynamic Material Instance)         |     |
+ *  |  |     UV offset / zoom / rotation         |     |
+ *  |  |                                         |     |
+ *  |  +-----------------------------------------+     |
+ *  |                                                  |
+ *  |  +---------[MinimapMarkerCanvas]-----------+     |
+ *  |  |   (A)           (Player)          (B)   |     |
+ *  |  |          [OBMapMarkerWidget ...]         |     |
+ *  |  +-----------------------------------------+     |
+ *  |                                                  |
+ *  |  +----------[CompassRingImage]-------------+     |
+ *  |  |              N                          |     |
+ *  |  |           W     E                       |     |
+ *  |  |              S                          |     |
+ *  |  +-----------------------------------------+     |
+ *  |                                                  |
+ *  |  +----------[OverlayWidget]----------------+     |
+ *  |  |   (OBMapOverlayWidget — NativePaint)    |     |
+ *  |  +-----------------------------------------+     |
+ *  +--------------------------------------------------+
+ *
+ *  Note: All layers are stacked on top of each other via an
+ *  Overlay or CanvasPanel. The MapImage sits at the bottom,
+ *  markers and compass ring above, overlay paint on top.
+ * =========================================================================
  */
 UCLASS()
 class OBNAVIGATION_API UOBMinimapWidget : public UUserWidget

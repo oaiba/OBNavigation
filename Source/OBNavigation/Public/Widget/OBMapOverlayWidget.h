@@ -7,6 +7,32 @@
 
 /**
  * Handles custom painting of overlay elements on top of a map widget.
+ *
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ *
+ *  +-------------------[Root]-------------------+
+ *  |                                            |
+ *  |  (No bound child widgets — all content     |
+ *  |   is drawn procedurally via NativePaint)   |
+ *  |                                            |
+ *  |      .------.                              |
+ *  |     /  Zone  \    <-- Painted polygon       |
+ *  |    |          |                            |
+ *  |     \        /                             |
+ *  |      '------'                              |
+ *  |                                            |
+ *  |    ------*------*------   <-- Painted path |
+ *  |                                            |
+ *  |         X  <-- Painted marker point        |
+ *  |                                            |
+ *  +--------------------------------------------+
+ *
+ *  Note: This widget is layered on top of a MapImage inside
+ *  the parent minimap/tactical-map widget. It matches the
+ *  parent's geometry and applies the same view context
+ *  (zoom, rotation, center UV) for correct projection.
+ * =========================================================================
  */
 UCLASS()
 class OBNAVIGATION_API UOBMapOverlayWidget : public UUserWidget

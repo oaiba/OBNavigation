@@ -8,6 +8,41 @@ class UOBTacticalMapConfigAsset;
 
 /**
  * Full-screen tactical map widget with independent zoom, pan, and view center state.
+ *
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ *
+ *  (Inherits all bound widgets from UOBMinimapWidget)
+ *
+ *  +------------------[Root/Overlay]------------------+
+ *  |                                                  |
+ *  |  +---------------[MapImage]----------------+     |
+ *  |  |                                         |     |
+ *  |  |     (Pannable & Zoomable)               |     |
+ *  |  |     ViewCenterUV drives scroll          |     |
+ *  |  |                                         |     |
+ *  |  +-----------------------------------------+     |
+ *  |                                                  |
+ *  |  +---------[MinimapMarkerCanvas]-----------+     |
+ *  |  |   (A)           (Player)          (B)   |     |
+ *  |  |          [OBMapMarkerWidget ...]         |     |
+ *  |  +-----------------------------------------+     |
+ *  |                                                  |
+ *  |  +----------[CompassRingImage]-------------+     |
+ *  |  |              N                          |     |
+ *  |  |           W     E                       |     |
+ *  |  |              S                          |     |
+ *  |  +-----------------------------------------+     |
+ *  |                                                  |
+ *  |  +----------[OverlayWidget]----------------+     |
+ *  |  |   (OBMapOverlayWidget — NativePaint)    |     |
+ *  |  +-----------------------------------------+     |
+ *  +--------------------------------------------------+
+ *
+ *  Note: Inherits the full minimap layout. Adds runtime
+ *  pan/zoom state (ViewCenterUV, PanInput) and a follow-mode
+ *  toggle. Typically occupies the full screen.
+ * =========================================================================
  */
 UCLASS()
 class OBNAVIGATION_API UOBTacticalMapWidget : public UOBMinimapWidget
