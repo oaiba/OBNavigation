@@ -32,7 +32,7 @@ class UOBNavigationSubsystem;
  *  |                                                  |
  *  |  +---------[MinimapMarkerCanvas]-----------+     |
  *  |  |   (A)           (Player)          (B)   |     |
- *  |  |          [OBMapMarkerWidget ...]         |     |
+ *  |  |          [OBMapMarkerWidget ...]        |     |
  *  |  +-----------------------------------------+     |
  *  |                                                  |
  *  |  +----------[CompassRingImage]-------------+     |
