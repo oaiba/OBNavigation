@@ -188,33 +188,6 @@ void UOBNavigationSubsystem::UnregisterMarker(const FGuid& MarkerID)
 	}
 }
 
-FGuid UOBNavigationSubsystem::RegisterMapMarker(AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig,
-                                                const FName InLayerName, const FVector InStaticLocation)
-{
-	// Ensure the config is valid before proceeding
-	if (!InConfig)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s::%hs] - Failed to register marker: InConfig is null."), *GetName(),
-		       __FUNCTION__);
-		return FGuid(); // Return invalid Guid
-	}
-
-	FOBNavigationMarkerSpec Spec;
-	Spec.TrackedActor = InTrackedActor;
-	Spec.ConfigAsset = InConfig;
-	Spec.LayerName = InLayerName;
-	Spec.WorldLocation = InStaticLocation;
-	Spec.WorldRotation = InTrackedActor ? InTrackedActor->GetActorRotation() : FRotator::ZeroRotator;
-	Spec.LifeTime = InConfig ? InConfig->LifeTime : 0.0f;
-	Spec.VisibilityPolicy = EOBMarkerVisibilityPolicy::Public;
-	return RegisterOrUpdateMarker(Spec);
-}
-
-void UOBNavigationSubsystem::UnregisterMapMarker(const FGuid& MarkerID)
-{
-	UnregisterMarker(MarkerID);
-}
-
 FGuid UOBNavigationSubsystem::GetMarkerIDForActor(AActor* InActor) const
 {
 	if (InActor)

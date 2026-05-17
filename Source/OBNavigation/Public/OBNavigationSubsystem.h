@@ -56,25 +56,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Markers")
 	void UnregisterMarker(const FGuid& MarkerID);
 
-	/**
-	 * @brief Registers a new marker.
-	 * @param InTrackedActor The actor to track. If nullptr, use InStaticLocation.
-	 * @param InConfig The marker's configuration asset.
-	 * @param InLayerName The logical layer name for this marker (e.g., "Quests", "Party").
-	 * @param InStaticLocation If not tracking an actor, this is the fixed world location.
-	 * @return The unique ID of the registered marker, or an invalid FGuid on failure.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Markers")
-	FGuid RegisterMapMarker(AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName,
-							FVector InStaticLocation = FVector::ZeroVector);
-
-	/**
-	 * @brief Unregisters a marker by its ID.
-	 * @param MarkerID The ID of the marker to unregister.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "OBNavigation|Markers")
-	void UnregisterMapMarker(const FGuid& MarkerID);
-
 	// Get all active markers for UI display
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Markers")
 	const TArray<UOBMapMarker*>& GetAllActiveMarkers() const { return ActiveMarkers; }

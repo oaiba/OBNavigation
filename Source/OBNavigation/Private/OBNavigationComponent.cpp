@@ -107,7 +107,7 @@ void UOBNavigationComponent::UnregisterCharacterMarker()
 {
 	if (NavSubsystem && CharacterMarkerID.IsValid())
 	{
-		NavSubsystem->UnregisterMapMarker(CharacterMarkerID);
+		NavSubsystem->UnregisterMarker(CharacterMarkerID);
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Unregistered character marker for '%s' (ID: %s)."), *GetName(),
 			   __FUNCTION__, *GetNameSafe(GetOwner()), *CharacterMarkerID.ToString());
 		CharacterMarkerID.Invalidate();

@@ -91,7 +91,6 @@ The subsystem is the runtime source of truth for local navigation UI.
 | `GetVisibleMarkers(EOBNavigationSurface)` | Returns markers visible on Minimap, FullMap, or Compass after policy filtering. |
 | `GetVisibleOverlayElements(EOBNavigationSurface, ...)` | Returns visible overlay marker/zone/path/freehand elements for map surfaces. |
 | `WorldToMapUVChecked(...)` | Converts world location to UV and returns a projection result enum. |
-| `RegisterMapMarker(...)` / `UnregisterMapMarker(...)` | Legacy Blueprint-compatible wrappers. Prefer the marker spec API for new work. |
 
 ### `FOBNavigationMarkerSpec`
 
