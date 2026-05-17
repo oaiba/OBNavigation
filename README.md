@@ -22,7 +22,9 @@ The current V1 target is a **multiplayer top-down extraction shooter**:
 - **Marker spec API:** `FOBNavigationMarkerSpec` supports marker type, tracked actor, static location, lifetime, owner player id, team id, visibility policy, and sort priority.
 - **Visibility policies:** `LocalOnly`, `SquadOnly`, `Public`, and `DebugOnly` prevent unwanted enemy markers from appearing by default.
 - **Cook-friendly asset loading:** runtime loads from configured soft references instead of scanning all assets with `AssetRegistry`.
-- **Minimap projection:** map panning, zooming, rotation, and player UV are driven through dynamic material parameters.
+- **Minimap projection:** player-centered map UV, zoom, rotation, and shape are driven through dynamic material parameters.
+- **Tactical map projection:** `UOBTacticalMapWidget` provides a full-map surface with independent zoom, free pan, view-center UV state, recenter-on-player, and optional player marker/compass display.
+- **Shared map view math:** minimap markers, full-map markers, and overlays use the same `FOBNavigationMapViewContext` projection path so pan/zoom/rotation behavior stays consistent across surfaces.
 - **Widget pooling:** marker widgets are reused and removed when markers are no longer visible.
 - **Extraction integration:** `ExtractionCoreGame` bridges team snapshots and replicated ping actors into this plugin.
 
@@ -158,6 +160,19 @@ Defines one runtime map texture, bounds, projection metadata, and overlay payloa
 
 `OBNavigation` does not own editor capture or map asset generation. Use `OBPanoramicMinimapGenerator` to export `UMinimapDefinitionDataAsset`, then let `ExtractionCoreGame` convert it to runtime specs.
 
+### `UOBTacticalMapConfigAsset`
+
+Defines full-screen tactical map interaction settings. This asset is separate from `UOBMinimapConfigAsset` so designers can tune full-map behavior without changing the minimap.
+
+- `InitialZoom`, `MinZoom`, `MaxZoom`
+- `ZoomStep`
+- `PanSpeed`
+- `bClampViewToMapBounds`
+- `bShowPlayerMarker`
+- `bShowCompassRing`
+- `bRotateWithPlayer`
+- `MarkerScale`
+
 ### `UOBMarkerConfigAsset`
 
 Defines marker visuals and surface visibility.
@@ -175,6 +190,7 @@ Defines marker visuals and surface visibility.
 Defines minimap rendering settings.
 
 - `MinimapBackgroundMaterial`: must support `MapTexture`, `PlayerPositionUV`, `PlayerYaw`, `Zoom`, `MapRotationOffsetRad`, and `ShapeAlpha`.
+- Tactical map uses the same material path. If the material exposes `ViewCenterUV`, the widget also writes it; `PlayerPositionUV` is still written for backwards compatibility.
 - `Zoom`, `MinZoom`, `MaxZoom`
 - `RotationSource`: for top-down shooters, `ActorRotation` is the recommended default.
 - `bShouldRotateMap`
@@ -201,15 +217,30 @@ Runtime:
 
 ### `UOBTacticalMapWidget`
 
-Full-map variant based on `UOBMinimapWidget`.
+Full-map variant based on `UOBMinimapWidget`. It uses `EOBNavigationSurface::FullMap`, so marker visibility comes from each marker config's FullMap flag. It does not manage open/close animation, pause state, or input mode; those remain game/HUD responsibilities.
 
 Blueprint-callable helpers:
 
+- `InitializeTacticalMapAndStartTracking(UOBMinimapConfigAsset*, UOBTacticalMapConfigAsset*)`
 - `AddZoomInput(float ZoomDelta)`
+- `AddPanInput(FVector2D PanDelta)`
 - `SetPanInput(FVector2D InPanInput)`
 - `GetPanInput()`
+- `SetViewCenterWorldLocation(FVector WorldLocation)`
+- `SetViewCenterUV(FVector2D MapUV)`
+- `RecenterOnTrackedPlayer()`
+- `GetViewCenterUV()`
+- `GetTacticalMapZoom()`
+- `IsFollowingTrackedPlayer()`
 
-V1 exposes pan/zoom state for UI input wiring. Full bespoke map interactions can be layered in Blueprint or extended in C++.
+Behavior:
+
+- Initializes centered on the tracked player when the active map layer can project that pawn; otherwise falls back to `(0.5, 0.5)` UV.
+- `AddPanInput` applies a one-shot screen-space pan delta in Slate units and exits follow mode.
+- `SetPanInput` stores continuous normalized pan input that is applied every tick using `PanSpeed`.
+- `RecenterOnTrackedPlayer` recenters and resumes follow mode.
+- Zoom clamps against `UOBTacticalMapConfigAsset`, not the minimap config.
+- Map overlays use the tactical view center, so path/zone/freehand overlays pan and zoom with the full map.
 
 ### `UOBMapMarkerWidget`
 
@@ -291,12 +322,20 @@ Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only
    - Set `MarkerWidgetClass`.
    - Call `InitializeAndStartTracking` with `UOBMinimapConfigAsset`.
 
-7. Setup marker UI:
+7. Setup tactical map UI:
+   - Create a `UOBTacticalMapConfigAsset`.
+   - Reparent the full-map Blueprint to `UOBTacticalMapWidget`.
+   - Add `MapImage`, `MinimapMarkerCanvas`, and optional `CompassRingImage`.
+   - Set `MarkerWidgetClass`.
+   - Call `InitializeTacticalMapAndStartTracking` with the minimap visual config and the tactical map config.
+   - Bind project input/UI to `AddZoomInput`, `AddPanInput` or `SetPanInput`, and `RecenterOnTrackedPlayer`.
+
+8. Setup marker UI:
    - Reparent marker Blueprint to `UOBMapMarkerWidget`.
    - Add `IdentifierIcon` and `DirectionalIndicator`.
    - Optionally add `DistanceText` for edge-clamped markers.
 
-8. Setup Extraction bridge:
+9. Setup Extraction bridge:
    - Add `UOverlayController_Navigation` to `AExtractionHUD::OverlayControllerClasses`.
    - Configure teammate and ping marker tags/configs.
    - Ensure `UOverlayController_Team` and `UOverlayController_InRaidMain` remain registered; HUD ordering code keeps dependencies before navigation.
@@ -339,7 +378,7 @@ Widgets should skip or clamp markers only after checking the projection result. 
 - No pathfinding or route drawing.
 - No shared drawn routes.
 - No render-target map capture inside `OBNavigation`; map capture is handled by `OBPanoramicMinimapGenerator`.
-- Full tactical map interaction is a V1 base class with zoom/pan hooks, not a finished map screen.
+- Tactical map does not provide a finished screen flow; HUD open/close, input mode, pause behavior, and animation are intentionally owned by the game/UI layer.
 - Registry asset must be configured in Project Settings for marker tag lookup. Map layers must be supplied through runtime specs, normally by `ExtractionCoreGame`.
 
 ## Build Verification

@@ -2,6 +2,8 @@
 
 #include "OBNavigation.h"
 
+DEFINE_LOG_CATEGORY(LogOBNavigation);
+
 #define LOCTEXT_NAMESPACE "FOBNavigationModule"
 
 void FOBNavigationModule::StartupModule()

@@ -7,19 +7,12 @@
 
 void UOBMapOverlayWidget::SetOverlayContext(const FOBNavigationMapLayerSpec& InLayerSpec,
                                             const TArray<FOBNavigationOverlayElement>& InOverlayElements,
-                                            const FVector& InTrackedWorldLocation,
-                                            const float InCurrentZoom,
-                                            const float InTotalStaticRotation,
-                                            const float InDynamicMapYaw,
-                                            const bool bInShouldRotateMap)
+                                            const FOBNavigationMapViewContext& InViewContext)
 {
 	LayerSpec = InLayerSpec;
 	OverlayElements = InOverlayElements;
-	TrackedWorldLocation = InTrackedWorldLocation;
-	CurrentZoom = InCurrentZoom;
-	TotalStaticRotation = InTotalStaticRotation;
-	DynamicMapYaw = InDynamicMapYaw;
-	bShouldRotateMap = bInShouldRotateMap;
+	ViewContext = InViewContext;
+	ViewContext.bClampToCanvas = false;
 	bHasOverlayContext = true;
 	InvalidateLayoutAndVolatility();
 }
@@ -147,26 +140,19 @@ int32 UOBMapOverlayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 bool UOBMapOverlayWidget::ProjectWorldToCanvas(const FVector& WorldLocation, const FVector2D& CanvasSize,
                                                FVector2D& OutCanvasPosition) const
 {
-	FVector2D PlayerUV;
-	EOBMapProjectionResult ProjectionResult = EOBMapProjectionResult::NoLayer;
-	if (!LayerSpec.ProjectWorldToMapUVChecked(TrackedWorldLocation, PlayerUV, ProjectionResult))
-	{
-		return false;
-	}
-
 	FVector2D PointUV;
-	ProjectionResult = EOBMapProjectionResult::NoLayer;
+	EOBMapProjectionResult ProjectionResult = EOBMapProjectionResult::NoLayer;
 	if (!LayerSpec.ProjectWorldToMapUVChecked(WorldLocation, PointUV, ProjectionResult))
 	{
 		return false;
 	}
 
-	const FVector2D CanvasCenter = CanvasSize * 0.5f;
-	const FVector2D PixelOffset = (PointUV - PlayerUV) * CanvasSize * CurrentZoom;
-	const float AppliedRotation = bShouldRotateMap
-		                              ? -(TotalStaticRotation + DynamicMapYaw)
-		                              : -TotalStaticRotation;
+	FOBNavigationCanvasProjection Projection;
+	if (!OBNavigation::MapView::ProjectUVToCanvas(PointUV, CanvasSize, ViewContext, Projection))
+	{
+		return false;
+	}
 
-	OutCanvasPosition = CanvasCenter + PixelOffset.GetRotated(AppliedRotation);
+	OutCanvasPosition = Projection.CanvasPosition;
 	return true;
 }

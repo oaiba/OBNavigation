@@ -1,4 +1,6 @@
-﻿#pragma once
+// Copyright OBExtraction. All Rights Reserved.
+
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
@@ -6,15 +8,44 @@
 
 class UOBNavigationMapRegistryAsset;
 
+/**
+ * @class UOBNavigationDeveloperSettings
+ * @brief Project-wide configuration for the OBNavigation plugin.
+ *
+ * Extends UDeveloperSettings so that entries appear automatically in
+ * Project Settings → Game → OB Navigation. Values are serialized into
+ * DefaultGame.ini (Config = Game) and shared across all team members
+ * via source control.
+ *
+ * @note This class is loaded once at engine startup. Changing values at
+ *       runtime has no effect unless the consuming code explicitly re-reads them.
+ *
+ * @see UOBNavigationSubsystem   – reads DefaultMapRegistry during Initialize().
+ * @see UOBNavigationMapRegistryAsset – the asset type referenced here.
+ */
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "OB Navigation"))
 class OBNAVIGATION_API UOBNavigationDeveloperSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
 
 public:
+	/**
+	 * The primary map-registry data asset that the navigation subsystem loads
+	 * on initialization. It contains all map-layer definitions and marker
+	 * configuration entries for the project.
+	 *
+	 * Stored as a TSoftObjectPtr so the asset is not force-loaded into memory
+	 * at CDO construction time; the subsystem resolves it on demand.
+	 */
 	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation")
 	TSoftObjectPtr<UOBNavigationMapRegistryAsset> DefaultMapRegistry;
 
+	/**
+	 * When enabled, the navigation subsystem will create and display debug-only
+	 * markers (e.g., axis gizmos, bounding volume outlines) on all surfaces.
+	 * Typically used during level design to verify marker placement and
+	 * world-to-UV projection accuracy. Should be disabled in shipping builds.
+	 */
 	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation")
 	bool bShowDebugMarkers = false;
 };

@@ -34,6 +34,38 @@ enum class EOBMapProjectionResult : uint8
 	InvalidBounds
 };
 
+/**
+ * Runtime view state used to project map UV coordinates into a widget canvas.
+ */
+struct OBNAVIGATION_API FOBNavigationMapViewContext
+{
+	FVector2D ViewCenterUV = FVector2D(0.5f, 0.5f);
+	float Zoom = 1.0f;
+	float TotalStaticRotation = 0.0f;
+	float DynamicMapYaw = 0.0f;
+	bool bShouldRotateMap = false;
+	bool bClampToCanvas = true;
+
+	float GetAppliedRotationDegrees() const;
+};
+
+/**
+ * Result of projecting a map UV coordinate into widget-local canvas space.
+ */
+struct OBNAVIGATION_API FOBNavigationCanvasProjection
+{
+	FVector2D CanvasPosition = FVector2D::ZeroVector;
+	FVector2D RotatedPixelOffset = FVector2D::ZeroVector;
+	bool bIsClampedToEdge = false;
+};
+
+namespace OBNavigation::MapView
+{
+	OBNAVIGATION_API bool ProjectUVToCanvas(const FVector2D& MapUV, const FVector2D& CanvasSize,
+	                                        const FOBNavigationMapViewContext& ViewContext,
+	                                        FOBNavigationCanvasProjection& OutProjection);
+}
+
 UENUM(BlueprintType)
 enum class EOBNavigationOverlayElementType : uint8
 {

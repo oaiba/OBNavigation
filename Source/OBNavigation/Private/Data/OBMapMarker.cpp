@@ -1,7 +1,7 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "OBMapMarker.h"
+#include "Data/OBMapMarker.h"
 
 void UOBMapMarker::Init(const FGuid& InID, AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName, FVector InStaticLocation)
 {

@@ -14,7 +14,7 @@ class UOBNavigationSubsystem;
  * @brief Component attached to ACharacter to handle local player navigation aspects
  * and register/update character-specific markers with the global subsystem.
  */
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), Blueprintable, BlueprintType)
 class OBNAVIGATION_API UOBNavigationComponent : public UActorComponent
 {
 	GENERATED_BODY()

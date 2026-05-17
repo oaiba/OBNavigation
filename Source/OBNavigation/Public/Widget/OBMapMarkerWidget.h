@@ -84,14 +84,12 @@ protected:
 	
 	/**
 	 * The static icon that identifies the object (e.g., a quest icon, a player number).
-	 * This part will NOT rotate. It must be named "IdentifierIcon" in the child Blueprint.
 	 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> IdentifierIcon;
 	
 	/**
 	 * The dynamic icon that indicates direction (e.g., an arrow, a cone).
-	 * This part WILL rotate. It must be named "DirectionalIndicator" in the child Blueprint.
 	 */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	TObjectPtr<UImage> DirectionalIndicator;

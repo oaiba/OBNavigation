@@ -1,4 +1,4 @@
-﻿#include "OBNavigationTypes.h"
+#include "Data/OBNavigationTypes.h"
 
 namespace
 {
@@ -19,6 +19,14 @@ FVector2D ApplyMapRotation(const FVector2D& InUV, const float RotationDegrees)
 		Offset.X * CosAngle - Offset.Y * SinAngle,
 		Offset.X * SinAngle + Offset.Y * CosAngle);
 }
+
+bool IsInsideOrOnBoundsXY(const FBox& Bounds, const FVector& WorldLocation)
+{
+	return WorldLocation.X >= Bounds.Min.X
+		&& WorldLocation.X <= Bounds.Max.X
+		&& WorldLocation.Y >= Bounds.Min.Y
+		&& WorldLocation.Y <= Bounds.Max.Y;
+}
 }
 
 bool FOBNavigationMapLayerSpec::HasValidWorldBounds() const
@@ -31,7 +39,7 @@ bool FOBNavigationMapLayerSpec::HasValidWorldBounds() const
 
 bool FOBNavigationMapLayerSpec::ContainsWorldLocationXY(const FVector& WorldLocation) const
 {
-	return HasValidWorldBounds() && WorldBounds.IsInsideXY(WorldLocation);
+	return HasValidWorldBounds() && IsInsideOrOnBoundsXY(WorldBounds, WorldLocation);
 }
 
 bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldLocation, FVector2D& OutMapUV,
@@ -43,7 +51,7 @@ bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldL
 		return false;
 	}
 
-	const bool bInsideBounds = WorldBounds.IsInsideXY(WorldLocation);
+	const bool bInsideBounds = IsInsideOrOnBoundsXY(WorldBounds, WorldLocation);
 	if (!bInsideBounds && !bClampQueriesToBounds)
 	{
 		OutResult = EOBMapProjectionResult::OutsideLayer;
@@ -66,5 +74,38 @@ bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldL
 	}
 
 	OutResult = bInsideBounds ? EOBMapProjectionResult::Projected : EOBMapProjectionResult::OutsideLayer;
+	return true;
+}
+
+float FOBNavigationMapViewContext::GetAppliedRotationDegrees() const
+{
+	return bShouldRotateMap ? -(TotalStaticRotation + DynamicMapYaw) : -TotalStaticRotation;
+}
+
+bool OBNavigation::MapView::ProjectUVToCanvas(const FVector2D& MapUV, const FVector2D& CanvasSize,
+                                              const FOBNavigationMapViewContext& ViewContext,
+                                              FOBNavigationCanvasProjection& OutProjection)
+{
+	if (CanvasSize.X <= 0.0f || CanvasSize.Y <= 0.0f)
+	{
+		return false;
+	}
+
+	const FVector2D CanvasCenter = CanvasSize * 0.5f;
+	const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
+	const FVector2D PixelOffset = (MapUV - ViewContext.ViewCenterUV) * CanvasSize * SafeZoom;
+	const FVector2D RotatedPixelOffset = PixelOffset.GetRotated(ViewContext.GetAppliedRotationDegrees());
+
+	OutProjection.RotatedPixelOffset = RotatedPixelOffset;
+	OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset;
+	OutProjection.bIsClampedToEdge = false;
+
+	const float MapRadius = FMath::Min(CanvasCenter.X, CanvasCenter.Y);
+	if (ViewContext.bClampToCanvas && MapRadius > 0.0f && RotatedPixelOffset.SizeSquared() > FMath::Square(MapRadius))
+	{
+		OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset.GetSafeNormal() * MapRadius;
+		OutProjection.bIsClampedToEdge = true;
+	}
+
 	return true;
 }

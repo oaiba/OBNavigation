@@ -2,30 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "OBNavigationTypes.h"
+#include "Data/OBNavigationTypes.h"
 #include "OBMapOverlayWidget.generated.h"
 
 /**
- * @class UOBMapOverlayWidget
- * @brief Handles custom painting of overlay elements on top of the map.
- * 
- * =========================================================================
- * Visual ASCII Wireframe:
- * 
- *  +-----------------[Root Layout]------------------+
- *  |                                                |
- *  |  +-------[Custom Painted Widget]------------+  |
- *  |  |                                          |  |
- *  |  |   /--------\     <-- Painted Path        |  |
- *  |  |  /          \                            |  |
- *  |  | |   [Zone]   |   <-- Painted Area        |  |
- *  |  |  \          /                            |  |
- *  |  |   \--------/                             |  |
- *  |  |                                          |  |
- *  |  +------------------------------------------+  |
- *  |                                                |
- *  +------------------------------------------------+
- * =========================================================================
+ * Handles custom painting of overlay elements on top of a map widget.
  */
 UCLASS()
 class OBNAVIGATION_API UOBMapOverlayWidget : public UUserWidget
@@ -33,14 +14,16 @@ class OBNAVIGATION_API UOBMapOverlayWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	/**
+	 * Sets the map layer, visible overlay elements, and current map view state used for custom painting.
+	 */
 	void SetOverlayContext(const FOBNavigationMapLayerSpec& InLayerSpec,
 	                       const TArray<FOBNavigationOverlayElement>& InOverlayElements,
-	                       const FVector& InTrackedWorldLocation,
-	                       const float InCurrentZoom,
-	                       const float InTotalStaticRotation,
-	                       const float InDynamicMapYaw,
-	                       const bool bInShouldRotateMap);
+	                       const FOBNavigationMapViewContext& InViewContext);
 
+	/**
+	 * Clears all overlay draw state until a valid map layer is available again.
+	 */
 	void ClearOverlayContext();
 
 protected:
@@ -58,10 +41,6 @@ private:
 	UPROPERTY(Transient)
 	TArray<FOBNavigationOverlayElement> OverlayElements;
 
-	FVector TrackedWorldLocation = FVector::ZeroVector;
-	float CurrentZoom = 1.0f;
-	float TotalStaticRotation = 0.0f;
-	float DynamicMapYaw = 0.0f;
-	bool bShouldRotateMap = false;
+	FOBNavigationMapViewContext ViewContext;
 	bool bHasOverlayContext = false;
 };
