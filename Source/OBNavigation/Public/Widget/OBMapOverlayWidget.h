@@ -1,10 +1,32 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "OBNavigationTypes.h"
 #include "OBMapOverlayWidget.generated.h"
 
+/**
+ * @class UOBMapOverlayWidget
+ * @brief Handles custom painting of overlay elements on top of the map.
+ * 
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ * 
+ *  +-----------------[Root Layout]------------------+
+ *  |                                                |
+ *  |  +-------[Custom Painted Widget]------------+  |
+ *  |  |                                          |  |
+ *  |  |   /--------\     <-- Painted Path        |  |
+ *  |  |  /          \                            |  |
+ *  |  | |   [Zone]   |   <-- Painted Area        |  |
+ *  |  |  \          /                            |  |
+ *  |  |   \--------/                             |  |
+ *  |  |                                          |  |
+ *  |  +------------------------------------------+  |
+ *  |                                                |
+ *  +------------------------------------------------+
+ * =========================================================================
+ */
 UCLASS()
 class OBNAVIGATION_API UOBMapOverlayWidget : public UUserWidget
 {

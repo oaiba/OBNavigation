@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "OBMinimapWidget.h"
@@ -7,6 +7,32 @@
 /**
  * Full-map variant of the minimap widget. V1 exposes runtime zoom/pan state for Blueprint input
  * while reusing the same marker projection and pooling path as the minimap.
+ * 
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ * 
+ *  +-----------------[Root/Overlay]-----------------+
+ *  |                                                |
+ *  |  +---------------[MapImage]---------------+    |
+ *  |  |        (Pannable & Zoomable)           |    |
+ *  |  |                                        |    |
+ *  |  +----------------------------------------+    |
+ *  |                                                |
+ *  |  +---------[MinimapMarkerCanvas]----------+    |
+ *  |  |     (A)                        (B)     |    |
+ *  |  |               (Player)                 |    |
+ *  |  |                                        |    |
+ *  |  +----------------------------------------+    |
+ *  |                                                |
+ *  |  +----------[CompassRingImage]------------+    |
+ *  |  |             N                          |    |
+ *  |  |          W     E                       |    |
+ *  |  |             S                          |    |
+ *  |  +----------------------------------------+    |
+ *  +------------------------------------------------+
+ * 
+ *  Note: Inherits from UOBMinimapWidget. It typically covers the full screen.
+ * =========================================================================
  */
 UCLASS()
 class OBNAVIGATION_API UOBTacticalMapWidget : public UOBMinimapWidget

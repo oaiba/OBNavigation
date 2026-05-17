@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -19,6 +19,34 @@ class UOBMinimapConfigAsset;
 /**
  * @class UOBMinimapWidget
  * @brief Displays the minimap. Updates are optimized by driving a dynamic material instance.
+ * 
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ * 
+ *  +-----------------[Root/Overlay]-----------------+
+ *  |                                                |
+ *  |  +---------------[MapImage]---------------+    |
+ *  |  |                                        |    |
+ *  |  |  (Render Target / Map Material)        |    |
+ *  |  |                                        |    |
+ *  |  +----------------------------------------+    |
+ *  |                                                |
+ *  |  +---------[MinimapMarkerCanvas]----------+    |
+ *  |  |     (A)                        (B)     |    |
+ *  |  |               (Player)                 |    |
+ *  |  |                                        |    |
+ *  |  +----------------------------------------+    |
+ *  |                                                |
+ *  |  +----------[CompassRingImage]------------+    |
+ *  |  |             N                          |    |
+ *  |  |          W     E                       |    |
+ *  |  |             S                          |    |
+ *  |  +----------------------------------------+    |
+ *  +------------------------------------------------+
+ * 
+ *  Note: MapImage, MinimapMarkerCanvas, and CompassRingImage 
+ *  are typically layered on top of each other.
+ * =========================================================================
  */
 UCLASS()
 class OBNAVIGATION_API UOBMinimapWidget : public UUserWidget

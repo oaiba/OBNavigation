@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -13,6 +13,32 @@ class UTexture2D;
  * @class UOBMapMarkerWidget
  * @brief Base C++ class for a map marker widget, containing a static identifier icon
  * and a dynamic directional indicator.
+ *
+ * =========================================================================
+ * Visual ASCII Wireframe:
+ * 
+ *  +-----------------[Root Layout]------------------+
+ *  |                                                |
+ *  |      +-----[DirectionalIndicator]-----+        |
+ *  |      |               /\               |        |
+ *  |      |              /  \              |        |
+ *  |      |             /____\             |        |
+ *  |      +--------------------------------+        |
+ *  |                                                |
+ *  |      +--------[IdentifierIcon]--------+        |
+ *  |      |               O                |        |
+ *  |      |              -|-               |        |
+ *  |      |              / \               |        |
+ *  |      +--------------------------------+        |
+ *  |                                                |
+ *  |      +---------[DistanceText]---------+        |
+ *  |      |             120m               |        |
+ *  |      +--------------------------------+        |
+ *  +------------------------------------------------+
+ * 
+ *  Note: Indicator and Icon overlap in the center. 
+ *  The Indicator rotates based on the target's rotation.
+ * =========================================================================
  */
 UCLASS(Abstract)
 class OBNAVIGATION_API UOBMapMarkerWidget : public UUserWidget
