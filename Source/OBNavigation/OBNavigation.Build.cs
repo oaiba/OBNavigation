@@ -36,13 +36,15 @@ public class OBNavigation : ModuleRules
 		
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
-			{
-				"CoreUObject",
-				"Engine",
-				"Slate",
-				"SlateCore",
-				"UMG"
-				// ... add private dependencies that you statically link with here ...	
+				{
+					"CoreUObject",
+					"Engine",
+					"InputCore",
+					"Mover",
+					"Slate",
+					"SlateCore",
+					"UMG"
+					// ... add private dependencies that you statically link with here ...	
 			}
 			);
 		

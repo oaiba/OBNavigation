@@ -121,6 +121,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Minimap")
 	bool GetCurrentMapLayerSpec(FOBNavigationMapLayerSpec& OutLayerSpec) const;
 
+	/**
+	 * Returns all map layer specifications currently available to UI widgets.
+	 *
+	 * @param OutLayerSpecs Populated with runtime/static layer specs in priority order.
+	 */
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|Map")
+	void GetAvailableMapLayerSpecs(TArray<FOBNavigationMapLayerSpec>& OutLayerSpecs) const;
+
 	/** Returns the pawn currently being tracked for minimap centering. May be null. */
 	UFUNCTION(BlueprintPure, Category = "OBNavigation")
 	APawn* GetTrackedPlayerPawn() const { return TrackedPlayerPawn.Get(); }
@@ -282,7 +290,7 @@ private:
 	//  Internal Helpers
 	// -----------------------------------------------------------------------
 
-	/** Loads the DefaultMapRegistry from developer settings and populates AllMarkerConfigs / MarkerConfigsByTag. */
+	/** Loads the DefaultMapRegistry from developer settings and populates marker tag lookup. */
 	void LoadRegistryData();
 
 	/** Merges RuntimeMapLayerSpecs with static layers from the registry into AllMapLayerSpecs, sorted by priority. */
@@ -310,8 +318,7 @@ private:
 	 * Resolves the UOBMarkerConfigAsset for a given marker spec. Priority:
 	 *   1. MarkerSpec.ConfigAsset (explicit)
 	 *   2. MarkerConfigsByTag lookup (by MarkerSpec.MarkerType)
-	 *   3. AllMarkerConfigs lookup (by MarkerSpec.LayerName, legacy)
-	 *   4. nullptr if nothing matches.
+	 *   3. nullptr if nothing matches.
 	 */
 	UOBMarkerConfigAsset* ResolveMarkerConfig(const FOBNavigationMarkerSpec& MarkerSpec) const;
 
@@ -333,10 +340,6 @@ private:
 	// -----------------------------------------------------------------------
 	//  Marker Config Lookup Tables
 	// -----------------------------------------------------------------------
-
-	/** All marker config assets indexed by asset FName. Populated from the registry at startup. */
-	UPROPERTY()
-	TMap<FName, TObjectPtr<UOBMarkerConfigAsset>> AllMarkerConfigs;
 
 	/** Fast lookup from FGameplayTag → config asset. Built from the registry's MarkerConfigs array. */
 	UPROPERTY()
@@ -363,6 +366,15 @@ private:
 
 	/** Guard flag: true once at least one valid layer has been selected. */
 	bool bHasCurrentMapLayerSpec = false;
+
+	/** Emits a few startup diagnostics for tracked pawn location/layer resolution. */
+	int32 StartupTrackedPawnTraceLogCount = 0;
+
+	/** Throttles diagnostics for pawns that never publish XY movement. */
+	float LastZeroXYFollowTraceTime = -1000.0f;
+
+	/** Caps repeated zero-XY diagnostics in long sessions. */
+	int32 ZeroXYFollowTraceLogCount = 0;
 
 	// -----------------------------------------------------------------------
 	//  Marker Pool

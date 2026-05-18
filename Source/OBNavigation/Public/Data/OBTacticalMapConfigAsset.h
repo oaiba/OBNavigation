@@ -41,15 +41,31 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap")
 	bool bShowPlayerMarker = false;
 
-	/** Shows the compass ring widget if the tactical map Blueprint includes one. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap")
-	bool bShowCompassRing = false;
-
-	/** Rotates the tactical map with the tracked player using the minimap rotation source. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap")
-	bool bRotateWithPlayer = false;
-
 	/** Multiplies marker config sizes on the tactical map. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap", meta = (ClampMin = "0.01"))
 	float MarkerScale = 1.0f;
+
+	/** Starts the tactical map in player-follow mode. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap")
+	bool bStartFollowingTrackedPlayer = true;
+
+	/** Default overlay category filter, or NAME_None to show every category. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Filters")
+	FName DefaultOverlayCategoryFilter = NAME_None;
+
+	/** Default overlay tag filter, or NAME_None to show every tag. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Filters")
+	FName DefaultOverlayTagFilter = NAME_None;
+
+	/** Marker layers enabled by default. Empty means every marker layer is visible. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Filters")
+	TArray<FName> DefaultEnabledMarkerLayers;
+
+	/** Allows this widget to override the displayed map layer/floor independently of the minimap. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Layers")
+	bool bAllowLayerSwitching = true;
+
+	/** Enables project UI to display tactical debug coordinates when desired. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Debug")
+	bool bShowDebugCoordinates = false;
 };

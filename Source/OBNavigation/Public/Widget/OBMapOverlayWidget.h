@@ -17,7 +17,7 @@
  *  |   is drawn procedurally via NativePaint)   |
  *  |                                            |
  *  |      .------.                              |
- *  |     /  Zone  \    <-- Painted polygon       |
+ *  |     /  Zone  \    <-- Painted polygon      |
  *  |    |          |                            |
  *  |     \        /                             |
  *  |      '------'                              |

@@ -1,94 +1,100 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Widget/OBMinimapWidget.h"
+#include "Input/Reply.h"
+#include "Types/SlateEnums.h"
+#include "Widget/OBMapWidgetBase.h"
 #include "OBTacticalMapWidget.generated.h"
 
+class UButton;
+class UCheckBox;
+class UComboBoxString;
+class UEditableTextBox;
+class UOBMinimapConfigAsset;
 class UOBTacticalMapConfigAsset;
+class USlider;
+class UTextBlock;
+class UWidget;
+
+/** Broadcast when tactical map center, zoom, or follow state changes. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTacticalMapViewChanged, FVector2D, ViewCenterUV, float, Zoom,
+                                               bool, bIsFollowingTrackedPlayer);
+
+/** Broadcast when the tactical map switches to a different map layer. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTacticalMapLayerChanged, FName, LayerName);
+
+/** Broadcast when tactical marker or overlay filters change. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTacticalMapFilterChanged);
 
 /**
- * Full-screen tactical map widget with independent zoom, pan, and view-center state.
+ * Full-screen tactical map widget with free pan, zoom, north-up orientation,
+ * layer overrides, and marker/overlay filtering.
  *
- * Extends UOBMinimapWidget to provide a pannable/zoomable full-screen map experience.
- * Unlike the minimap — which always centers on the tracked pawn — the tactical map
- * maintains its own ViewCenterUV that can be freely moved via mouse drag (AddPanInput),
- * gamepad stick (SetPanInput + continuous apply), or Blueprint API (SetViewCenterUV /
- * SetViewCenterWorldLocation). A "follow mode" toggle (bIsFollowingTrackedPlayer) lets
- * the view snap back to the player when RecenterOnTrackedPlayer() is called.
- *
- * Override Summary
- * ----------------
- * | Base virtual              | Tactical override                                       |
- * |---------------------------|---------------------------------------------------------|
- * | GetNavigationSurface()    | Returns EOBNavigationSurface::FullMap                   |
- * | GetInitialZoom()          | Reads from UOBTacticalMapConfigAsset::InitialZoom       |
- * | GetMinimumZoom()          | Reads from UOBTacticalMapConfigAsset::MinZoom           |
- * | GetMaximumZoom()          | Reads from UOBTacticalMapConfigAsset::MaxZoom           |
- * | ShouldRotateMap()         | Reads from UOBTacticalMapConfigAsset::bRotateWithPlayer |
- * | ShouldCenterPlayerMarker()| Returns false — player floats freely on the canvas      |
- * | ShouldShowPlayerMarker()  | Reads from UOBTacticalMapConfigAsset::bShowPlayerMarker |
- * | GetMarkerScale()          | Reads from UOBTacticalMapConfigAsset::MarkerScale       |
- * | ResolveViewCenterUV()     | Uses player UV in follow mode, else cached ViewCenterUV |
- * | OnViewContextUpdated()    | Caches resolved UV back into ViewCenterUV when following|
- *
- * Initialization
- * ---------------
- * Call InitializeTacticalMapAndStartTracking() instead of the base InitializeAndStartTracking().
- * This sets up the tactical-specific config, resets pan/zoom state, calls through to the base
- * initialization, and optionally hides the compass ring.
+ * Extends UOBMapWidgetBase with tactical-specific behavior: the view center
+ * can be freely panned via mouse drag (AddPanInput), gamepad stick (SetPanInput),
+ * or Blueprint API (SetViewCenterUV / SetViewCenterWorldLocation). A follow-mode
+ * toggle (bIsFollowingTrackedPlayer) lets the view snap back to the player via
+ * RecenterOnTrackedPlayer(). Supports independent layer selection, marker-layer
+ * filtering, and overlay category/tag filtering.
  *
  * =========================================================================
  * Visual ASCII Wireframe:
  *
- *  (Inherits all bound widgets from UOBMinimapWidget)
+	 *  +======================[Tactical Root]========================+
+	 *  |                                                             |
+	 *  |  [TopBar]                                                   |
+	 *  |   [LayerComboBox] [ClearLayerOverrideButton]                |
+	 *  |   [ActiveLayerText]                                         |
+	 *  |                                                             | 
+	 *  |  +--------------------[MapInputArea]---------------------+  |
+	 *  |  | +------------------[MapImage]-----------------------+ |  |
+	 *  |  | |   north-up map material, pan/zoom by ViewCenterUV | |  |
+	 *  |  | +---------------------------------------------------+ |  |
+	 *  |  | +---------------[MapMarkerCanvas]-------------------+ |  |
+	 *  |  | | [OverlayWidget] Z:0, markers Z:1, player Z:10     | |  |
+	 *  |  | +---------------------------------------------------+ |  |
+	 *  |  +-------------------------------------------------------+  |
+	 *  |                                                             |
+	 *  |  [ZoomOutButton] [ZoomSlider] [ZoomInButton] [ZoomValue]    |
+	 *  |  [PanUp/Down/Left/RightButton] [RecenterButton]             |
+	 *  |  [FollowPlayerCheckBox] [FollowStateText]                   |
+	 *  |                                                             |
+	 *  |  [MarkerLayerComboBox] [MarkerLayerEnabledCheckBox]         |
+	 *  |  [OverlayCategoryTextBox] [OverlayTagTextBox] [Clear]       |
+	 *  |  [ViewCenterText] [PanInputText]                            |
+	 *  +=============================================================+
  *
- *  +------------------[Root/Overlay]------------------+
- *  |                                                  |
- *  |  +---------------[MapImage]----------------+     |
- *  |  |                                         |     |
- *  |  |     (Pannable & Zoomable)               |     |
- *  |  |     ViewCenterUV drives scroll          |     |
- *  |  |                                         |     |
- *  |  +-----------------------------------------+     |
- *  |                                                  |
- *  |  +---------[MinimapMarkerCanvas]-----------+     |
- *  |  |   (A)           (Player)          (B)   |     |
- *  |  |          [OBMapMarkerWidget ...]        |     |
- *  |  +-----------------------------------------+     |
- *  |                                                  |
- *  |  +----------[CompassRingImage]-------------+     |
- *  |  |              N                          |     |
- *  |  |           W     E                       |     |
- *  |  |              S                          |     |
- *  |  +-----------------------------------------+     |
- *  |                                                  |
- *  |  +----------[OverlayWidget]----------------+     |
- *  |  |   (OBMapOverlayWidget — NativePaint)    |     |
- *  |  +-----------------------------------------+     |
- *  +--------------------------------------------------+
+ * =========================================================================
+ * Pan / Zoom / Follow state machine:
  *
- *  Note: Inherits the full minimap layout. Adds runtime
- *  pan/zoom state (ViewCenterUV, PanInput) and a follow-mode
- *  toggle. Typically occupies the full screen.
+ *       ┌───────────────────────────────────┐
+ *       │       bIsFollowingTrackedPlayer   │
+ *       │              = true               │
+ *       │  ViewCenterUV ← player UV/tick    │
+ *       └────────┬──────────────────────────┘
+ *                │  AddPanInput() / SetViewCenterUV()
+ *                ▼
+ *       ┌───────────────────────────────────┐
+ *       │       bIsFollowingTrackedPlayer   │
+ *       │              = false              │
+ *       │  ViewCenterUV ← manual input     │
+ *       └────────┬──────────────────────────┘
+ *                │  RecenterOnTrackedPlayer()
+ *                ▼  (loops back to follow)
+ *
  * =========================================================================
  */
 UCLASS()
-class OBNAVIGATION_API UOBTacticalMapWidget : public UOBMinimapWidget
+class OBNAVIGATION_API UOBTacticalMapWidget : public UOBMapWidgetBase
 {
 	GENERATED_BODY()
 
 public:
-
 	/**
-	 * Initializes the tactical map using minimap visual assets and tactical-map view settings.
+	 * Initializes the tactical map using shared visual assets and tactical behavior settings.
 	 *
-	 * Stores the tactical config, resets ViewCenterUV / PanInput / follow-mode, calls the
-	 * base InitializeAndStartTracking(), toggles the compass ring visibility based on the
-	 * tactical config, and re-centers on the tracked player.
-	 *
-	 * @param InMinimapConfigAsset   Shared visual config (material, compass texture, etc.).
-	 * @param InTacticalConfigAsset  Tactical-specific settings (zoom range, pan speed, etc.).
-	 *                               Must be valid; passing nullptr aborts initialization.
+	 * @param InMinimapConfigAsset Visual config that supplies map material and alignment settings.
+	 * @param InTacticalConfigAsset Tactical config that supplies zoom, pan, filters, and follow defaults.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void InitializeTacticalMapAndStartTracking(UOBMinimapConfigAsset* InMinimapConfigAsset,
@@ -97,203 +103,497 @@ public:
 	/**
 	 * Applies a discrete zoom step. Positive values zoom in, negative values zoom out.
 	 *
-	 * The delta is multiplied by UOBTacticalMapConfigAsset::ZoomStep before being added
-	 * to the current zoom level.
-	 *
-	 * @param ZoomDelta  Signed zoom delta (typically +1 / -1 from scroll wheel).
+	 * @param ZoomDelta Signed input step, usually +1 or -1.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void AddZoomInput(float ZoomDelta);
 
+	/** Sets the tactical map zoom directly, clamped by the configured zoom range. */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void SetTacticalMapZoom(float NewZoom);
+
 	/**
-	 * Applies a one-shot screen-space pan delta in Slate units (pixels).
+	 * Applies a one-shot screen-space pan delta in Slate units.
 	 *
-	 * The delta is un-rotated by the current map rotation, converted to UV space using
-	 * the canvas size and current zoom, and subtracted from ViewCenterUV. Automatically
-	 * disables follow mode.
-	 *
-	 * @param PanDelta  Screen-space offset in pixels (e.g. mouse drag delta).
+	 * @param PanDelta Screen-space delta in pixels or Slate units.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void AddPanInput(FVector2D PanDelta);
 
 	/**
-	 * Sets normalized continuous pan input applied every tick via ApplyContinuousPanInput().
+	 * Sets normalized continuous pan input applied each tick.
 	 *
-	 * Use this for gamepad stick or keyboard-driven panning. The input vector is multiplied
-	 * by UOBTacticalMapConfigAsset::PanSpeed and DeltaTime each frame.
-	 *
-	 * @param InPanInput  Normalized direction vector (typically in [-1, 1] per axis).
+	 * @param InPanInput Direction vector, typically in [-1, 1] per axis.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void SetPanInput(FVector2D InPanInput);
 
-	/**
-	 * Returns the current continuous pan input vector.
-	 */
+	/** Returns the current continuous pan input vector. */
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|TacticalMap")
 	FVector2D GetPanInput() const { return PanInput; }
 
 	/**
-	 * Sets the tactical map center from a world location on the active map layer.
+	 * Centers the tactical map on a world location in the active tactical layer.
 	 *
-	 * Projects the world location to UV space via UOBNavigationSubsystem::WorldToMapUVChecked()
-	 * and disables follow mode. No-op if the subsystem is unavailable or the projection fails.
-	 *
-	 * @param WorldLocation  The 3D world position to center on.
+	 * @param WorldLocation World-space location to project into map UV.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void SetViewCenterWorldLocation(FVector WorldLocation);
 
 	/**
-	 * Sets the tactical map center as normalized UV coordinates.
+	 * Sets the tactical map center in normalized map UV coordinates.
 	 *
-	 * Directly sets ViewCenterUV and disables follow mode. The UV is optionally clamped
-	 * to [0, 1] based on UOBTacticalMapConfigAsset::bClampViewToMapBounds.
-	 *
-	 * @param MapUV  Normalized map coordinates, where (0,0) is the top-left and (1,1) is
-	 *               the bottom-right of the map texture.
+	 * @param MapUV Normalized map coordinate where (0,0) is top-left and (1,1) is bottom-right.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void SetViewCenterUV(FVector2D MapUV);
 
-	/**
-	 * Recenters the tactical map on the tracked player and resumes follow mode.
-	 *
-	 * Projects the tracked pawn's world location to UV space and stores it as the new
-	 * ViewCenterUV. If the pawn or subsystem is unavailable, follow mode is still re-enabled
-	 * with the current ViewCenterUV so that the view will snap once the pawn becomes available.
-	 */
+	/** Recenters the tactical map on the tracked player and enables follow mode. */
 	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
 	void RecenterOnTrackedPlayer();
 
 	/**
+	 * Enables or disables follow mode.
+	 *
+	 * @param bFollow True to follow the tracked player, false to keep the current free-pan center.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void SetFollowTrackedPlayer(bool bFollow);
+
+	/**
+	 * Returns true while the tactical map view center follows the tracked player.
+	 * 
+	 * @return True if follow mode is active.
+	 */
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|TacticalMap")
+	bool IsFollowingTrackedPlayer() const { return bIsFollowingTrackedPlayer; }
+
+	/**
 	 * Returns the current tactical map center in normalized UV coordinates.
+	 * 
+	 * @return The map view center UV (in [0, 1] range).
 	 */
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|TacticalMap")
 	FVector2D GetViewCenterUV() const { return ViewCenterUV; }
 
 	/**
 	 * Returns the current tactical map zoom multiplier.
-	 * Convenience wrapper around the base GetMinimapZoom().
+	 * 
+	 * @return The zoom multiplier applied to the map.
 	 */
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|TacticalMap")
-	float GetTacticalMapZoom() const { return GetMinimapZoom(); }
+	float GetTacticalMapZoom() const { return GetMapZoom(); }
 
 	/**
-	 * Returns true while the tactical map view center follows the tracked player.
-	 * Follow mode is enabled by RecenterOnTrackedPlayer() and disabled by any
-	 * explicit pan or SetViewCenter call.
+	 * Enables or disables a tactical marker layer filter.
+	 *
+	 * @param LayerName Marker layer name from UOBMapMarker::MarkerLayerName.
+	 * @param bEnabled True to show this layer, false to hide it.
 	 */
-	UFUNCTION(BlueprintPure, Category = "OBNavigation|TacticalMap")
-	bool IsFollowingTrackedPlayer() const { return bIsFollowingTrackedPlayer; }
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void SetMarkerLayerFilter(FName LayerName, bool bEnabled);
+
+	/** Clears all marker-layer filtering so every visible full-map marker layer is shown. */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void ClearMarkerLayerFilter();
+
+	/**
+	 * Filters tactical overlays by category.
+	 *
+	 * @param Category Category to show, or NAME_None to show all categories.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void SetOverlayCategoryFilter(FName Category);
+
+	/**
+	 * Filters tactical overlays by tag.
+	 *
+	 * @param Tag Tag to show, or NAME_None to show all tags.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void SetOverlayTagFilter(FName Tag);
+
+	/** Clears tactical overlay category and tag filters. */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void ClearOverlayFilters();
+
+	/**
+	 * Overrides the tactical map layer by name without affecting minimap layer selection.
+	 *
+	 * @param LayerName Layer/floor name to display.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void SetTacticalMapLayerByName(FName LayerName);
+
+	/**
+	 * Clears the tactical layer override so the map follows the subsystem current layer again.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "OBNavigation|TacticalMap")
+	void ClearTacticalMapLayerOverride();
+
+	/** Fired when tactical map center, zoom, or follow state changes. */
+	UPROPERTY(BlueprintAssignable, Category = "OBNavigation|TacticalMap")
+	FOnTacticalMapViewChanged OnTacticalMapViewChanged;
+
+	/** Fired when the tactical map layer override changes. */
+	UPROPERTY(BlueprintAssignable, Category = "OBNavigation|TacticalMap")
+	FOnTacticalMapLayerChanged OnTacticalMapLayerChanged;
+
+	/** Fired when marker or overlay filters change. */
+	UPROPERTY(BlueprintAssignable, Category = "OBNavigation|TacticalMap")
+	FOnTacticalMapFilterChanged OnTacticalMapFilterChanged;
 
 protected:
-
-	/** Applies continuous pan input before delegating to the base NativeTick which
-	 *  handles material updates, marker projection, and overlay painting. */
+	/**
+	 * Applies continuous pan input before the shared map update path.
+	 * 
+	 * @param MyGeometry The widget geometry.
+	 * @param InDeltaTime The time elapsed since the last tick.
+	 */
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
-	// ------------------------------------------------------------------
-	//  Policy overrides — customize base minimap behavior for full-screen use
-	// ------------------------------------------------------------------
+	/** Handles direct mouse press input on the optional map input area. */
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	/** Reports this widget as FullMap so that UOBNavigationSubsystem returns the
-	 *  correct marker visibility set for full-screen display. */
+	/** Handles direct mouse release input on the optional map input area. */
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	/** Handles direct mouse drag input on the optional map input area. */
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	/** Handles direct mouse-wheel zoom input on the optional map input area. */
+	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	/**
+	 * Returns the full-map navigation surface.
+	 * 
+	 * @return The navigation surface identifier for the tactical map.
+	 */
 	virtual EOBNavigationSurface GetNavigationSurface() const override { return EOBNavigationSurface::FullMap; }
 
-	/** @return UOBTacticalMapConfigAsset::InitialZoom, falling back to the base if unavailable. */
+	/**
+	 * Resolves the tactical active layer, honoring any local layer override.
+	 * 
+	 * @param OutLayerSpec The resulting layer specification to apply.
+	 * @return True if a valid layer was resolved.
+	 */
+	virtual bool ResolveActiveLayer(FOBNavigationMapLayerSpec& OutLayerSpec) const override;
+
+	/**
+	 * Returns tactical initial zoom.
+	 * 
+	 * @return The initial zoom level specific to the tactical map.
+	 */
 	virtual float GetInitialZoom() const override;
 
-	/** @return UOBTacticalMapConfigAsset::MinZoom, falling back to the base if unavailable. */
+	/**
+	 * Returns tactical minimum zoom.
+	 * 
+	 * @return The minimum boundary for the tactical zoom.
+	 */
 	virtual float GetMinimumZoom() const override;
 
-	/** @return UOBTacticalMapConfigAsset::MaxZoom, falling back to the base if unavailable. */
+	/**
+	 * Returns tactical maximum zoom.
+	 * 
+	 * @return The maximum boundary for the tactical zoom.
+	 */
 	virtual float GetMaximumZoom() const override;
 
-	/** Returns UOBTacticalMapConfigAsset::bRotateWithPlayer.
-	 *  When true, the map texture rotates with the tracked pawn's yaw.
-	 * @return True if the map should rotate, false otherwise.
+	/**
+	 * Always returns false because tactical map v1 is north-up.
+	 * 
+	 * @return Always false.
 	 */
 	virtual bool ShouldRotateMap() const override;
 
-	/** Always returns false — the player marker floats freely on the pannable canvas
-	 *  rather than being pinned to the center as on the minimap.
-	 * @return True if the player marker should be centered, false otherwise.
+	/**
+	 * Always returns false so the player marker floats on the free-pan map.
+	 * 
+	 * @return Always false.
 	 */
 	virtual bool ShouldCenterPlayerMarker() const override;
 
-	/** Returns UOBTacticalMapConfigAsset::bShowPlayerMarker.
-	 *  Designers can toggle player marker visibility independently of the minimap.
-	 * @return True if the player marker should be shown, false otherwise.
+	/**
+	 * Returns the tactical player-marker visibility setting.
+	 * 
+	 * @return True if the player marker is allowed to be shown.
 	 */
 	virtual bool ShouldShowPlayerMarker() const override;
 
-	/** Returns UOBTacticalMapConfigAsset::MarkerScale (clamped >= 0.01).
-	 *  Allows designers to adjust marker icon density on the full-screen map.
-	 * @return The marker scale.
+	/**
+	 * Applies tactical marker layer filters.
+	 * 
+	 * @param Marker The map marker to evaluate.
+	 * @return True if the marker passes filtering conditions.
+	 */
+	virtual bool ShouldShowMarker(const UOBMapMarker* Marker) const override;
+
+	/**
+	 * Returns the tactical marker size multiplier.
+	 * 
+	 * @return The scale applied to tactical map markers.
 	 */
 	virtual float GetMarkerScale() const override;
 
 	/**
-	 * In follow mode, projects the tracked pawn's world position to UV and outputs it.
-	 * Otherwise, outputs the cached ViewCenterUV directly (always returns true).
-	 *
-	 * @param CurrentLayer     The active map layer specification.
-	 * @param TrackedPawn      The locally-controlled pawn. May be nullptr.
-	 * @param OutViewCenterUV  [out] The computed view center in [0,1] UV space.
-	 * @return Always true — the tactical map can display at any ViewCenterUV.
+	 * Returns the tactical overlay category filter.
+	 * 
+	 * @return The category name currently being filtered.
+	 */
+	virtual FName GetOverlayCategoryFilter() const override;
+
+	/**
+	 * Returns the tactical overlay tag filter.
+	 * 
+	 * @return The tag name currently being filtered.
+	 */
+	virtual FName GetOverlayTagFilter() const override;
+
+	/**
+	 * Resolves player UV in follow mode or returns cached free-pan center.
+	 * 
+	 * @param CurrentLayer The active navigation map layer.
+	 * @param TrackedPawn The tracked player pawn.
+	 * @param OutViewCenterUV The resulting UV coordinate.
+	 * @return True if a valid UV was resolved.
 	 */
 	virtual bool ResolveViewCenterUV(const FOBNavigationMapLayerSpec& CurrentLayer, const APawn* TrackedPawn,
 	                                 FVector2D& OutViewCenterUV) const override;
 
 	/**
-	 * Caches the resolved ViewCenterUV back into this widget's state when following
-	 * the tracked player, so that switching to manual pan starts from the player's
-	 * last known position.
-	 * @param ViewContext The current view context.
-	 * @param CurrentLayer The current map layer.
-	 * @param TrackedPawn The tracked pawn.
+	 * Tactical map uses static north-up alignment only; no pawn yaw is applied.
+	 * 
+	 * @param TrackedPawn The pawn tracking the rotation.
+	 * @return Always 0.0f.
+	 */
+	virtual float GetDynamicMapYaw(const APawn* TrackedPawn) const override;
+
+	/**
+	 * Returns static map alignment and visual config offset without pawn yaw.
+	 * 
+	 * @return The total static rotation in degrees.
+	 */
+	virtual float GetTotalStaticRotation() const override;
+
+	/**
+	 * Caches the followed player UV and notifies listeners when the view changes.
+	 * 
+	 * @param ViewContext The newly created map view context.
+	 * @param CurrentLayer The active navigation map layer.
+	 * @param TrackedPawn The tracked player pawn.
 	 */
 	virtual void OnViewContextUpdated(const FOBNavigationMapViewContext& ViewContext,
 	                                  const FOBNavigationMapLayerSpec& CurrentLayer, const APawn* TrackedPawn) override;
 
 private:
-	// ------------------------------------------------------------------
-	//  Internal helpers
-	// ------------------------------------------------------------------
+	static constexpr const TCHAR* AutoLayerOption = TEXT("Auto");
+	static constexpr const TCHAR* AllMarkerLayersOption = TEXT("All");
 
-	/** Applies continuous pan input (PanInput * PanSpeed * DeltaTime) each frame.
-	 *  Early-outs if the widget is not initialized, not visible, or PanInput is near zero.
-	 * @param DeltaTime The delta time.
-	 */
+	/** Applies continuous pan input scaled by PanSpeed and DeltaTime. */
 	void ApplyContinuousPanInput(float DeltaTime);
 
-	/** Internal setter for ViewCenterUV. Optionally clamps to [0,1] based on
-	 *  UOBTacticalMapConfigAsset::bClampViewToMapBounds and updates the follow flag.
-	 * @param MapUV The map UV.
-	 * @param bFollowTrackedPlayer True if the view should follow the tracked player, false otherwise.
-	 */
+	/** Sets ViewCenterUV, optionally clamps to map bounds, and updates follow state. */
 	void SetViewCenterUVInternal(FVector2D MapUV, bool bFollowTrackedPlayer);
 
-	// ------------------------------------------------------------------
-	//  State — not serialized, rebuilt at runtime
-	// ------------------------------------------------------------------
+	/** Broadcasts the current tactical view state. */
+	void BroadcastViewChanged() const;
 
-	/** Configuration asset governing zoom range, pan speed, follow behavior, and visibility
-	 *  toggles for the tactical map. Set during InitializeTacticalMapAndStartTracking(). */
+	/** Finds an available map layer by name. */
+	bool FindAvailableLayerByName(FName LayerName, FOBNavigationMapLayerSpec& OutLayerSpec) const;
+
+	/** Binds optional Blueprint controls when present. */
+	void BindOptionalTacticalControls();
+
+	/** Refreshes optional control values and status labels from current state. */
+	void RefreshTacticalControlState();
+
+	/** Populates the optional map-layer combo box from navigation layers. */
+	void PopulateLayerComboBox();
+
+	/** Populates the optional marker-layer combo box from active full-map markers. */
+	void PopulateMarkerLayerComboBox();
+
+	/** Returns whether the screen-space position is inside the optional map input area. */
+	bool IsPointerOverMapInputArea(const FPointerEvent& InMouseEvent) const;
+
+	/** Converts a normalized slider value into the configured zoom range. */
+	float GetZoomFromSliderValue(float SliderValue) const;
+
+	/** Converts current zoom into a normalized slider value. */
+	float GetSliderValueFromZoom() const;
+
+	UFUNCTION()
+	void HandleZoomInClicked();
+
+	UFUNCTION()
+	void HandleZoomOutClicked();
+
+	UFUNCTION()
+	void HandleZoomSliderChanged(float SliderValue);
+
+	UFUNCTION()
+	void HandlePanUpClicked();
+
+	UFUNCTION()
+	void HandlePanDownClicked();
+
+	UFUNCTION()
+	void HandlePanLeftClicked();
+
+	UFUNCTION()
+	void HandlePanRightClicked();
+
+	UFUNCTION()
+	void HandleRecenterClicked();
+
+	UFUNCTION()
+	void HandleFollowCheckChanged(bool bIsChecked);
+
+	UFUNCTION()
+	void HandleLayerSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleClearLayerOverrideClicked();
+
+	UFUNCTION()
+	void HandleMarkerLayerSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void HandleMarkerLayerEnabledChanged(bool bIsChecked);
+
+	UFUNCTION()
+	void HandleOverlayCategoryCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	UFUNCTION()
+	void HandleOverlayTagCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	UFUNCTION()
+	void HandleClearOverlayFiltersClicked();
+
+	/** Tactical behavior configuration assigned at initialization. */
 	UPROPERTY(Transient)
 	TObjectPtr<UOBTacticalMapConfigAsset> TacticalConfigAsset;
 
-	/** Current map view center in normalized UV space [0,1].
-	 *  Updated every frame in follow mode, or on explicit pan/set calls. */
+	/** Current map view center in normalized UV space. */
 	FVector2D ViewCenterUV = FVector2D(0.5f, 0.5f);
 
-	/** Continuous pan direction input (typically from gamepad stick).
-	 *  Multiplied by PanSpeed and DeltaTime in ApplyContinuousPanInput(). */
+	/** Continuous pan direction input. */
 	FVector2D PanInput = FVector2D::ZeroVector;
 
-	/** When true, ViewCenterUV tracks the player pawn's projected UV each frame.
-	 *  Disabled by any explicit pan or SetViewCenter call; re-enabled by RecenterOnTrackedPlayer(). */
+	/** True when ViewCenterUV follows the tracked player's projected UV. */
 	bool bIsFollowingTrackedPlayer = true;
+
+	/** True when marker layer filtering is active. */
+	bool bHasMarkerLayerFilter = false;
+
+	/** Enabled tactical marker layers. */
+	TSet<FName> EnabledMarkerLayers;
+
+	/** Overlay category filter for tactical overlays. */
+	FName OverlayCategoryFilter = NAME_None;
+
+	/** Overlay tag filter for tactical overlays. */
+	FName OverlayTagFilter = NAME_None;
+
+	/** True when a tactical layer override is active. */
+	bool bHasTacticalLayerOverride = false;
+
+	/** Tactical layer override name. */
+	FName TacticalLayerOverrideName = NAME_None;
+
+	/** Currently selected marker layer in the optional marker filter UI. */
+	FName SelectedMarkerLayerName = NAME_None;
+
+	/** Prevents optional widget event handlers from reacting to programmatic refreshes. */
+	bool bIsRefreshingTacticalControls = false;
+
+	/** Prevents duplicate delegate binding if initialization is called more than once. */
+	bool bAreOptionalTacticalControlsBound = false;
+
+	/** True while the optional map input area is being dragged. */
+	bool bIsDraggingMapInputArea = false;
+
+	/** Optional button for zooming in by one configured step. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> ZoomInButton;
+
+	/** Optional button for zooming out by one configured step. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> ZoomOutButton;
+
+	/** Optional normalized zoom slider. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<USlider> ZoomSlider;
+
+	/** Optional text label for the current zoom value. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> ZoomValueText;
+
+	/** Optional one-shot pan buttons. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> PanUpButton;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> PanDownButton;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> PanLeftButton;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> PanRightButton;
+
+	/** Optional map hit area used for mouse wheel and drag input. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UWidget> MapInputArea;
+
+	/** Optional recenter/follow controls. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> RecenterButton;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UCheckBox> FollowPlayerCheckBox;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> FollowStateText;
+
+	/** Optional layer controls. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UComboBoxString> LayerComboBox;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> ClearLayerOverrideButton;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> ActiveLayerText;
+
+	/** Optional marker filter controls. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UComboBoxString> MarkerLayerComboBox;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UCheckBox> MarkerLayerEnabledCheckBox;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> ActiveMarkerFilterText;
+
+	/** Optional overlay filter controls. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UEditableTextBox> OverlayCategoryTextBox;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UEditableTextBox> OverlayTagTextBox;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UButton> ClearOverlayFiltersButton;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> ActiveOverlayFilterText;
+
+	/** Optional debug/status labels. */
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> ViewCenterText;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> PanInputText;
 };

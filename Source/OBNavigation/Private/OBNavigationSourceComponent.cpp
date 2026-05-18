@@ -1,5 +1,6 @@
 ﻿#include "OBNavigationSourceComponent.h"
 
+#include "OBNavigation.h"
 #include "OBNavigationSubsystem.h"
 
 UOBNavigationSourceComponent::UOBNavigationSourceComponent()
@@ -41,7 +42,7 @@ FGuid UOBNavigationSourceComponent::RegisterOrUpdateNavigationMarker()
 	Spec.LayerName = LayerName;
 	Spec.ConfigAsset = MarkerConfig;
 	Spec.TrackedActor = bTrackOwner ? GetOwner() : nullptr;
-	Spec.WorldLocation = GetOwner() ? GetOwner()->GetActorLocation() : FVector::ZeroVector;
+	Spec.WorldLocation = GetOwner() ? OBNavigation::ResolveActorNavigationLocation(GetOwner()) : FVector::ZeroVector;
 	Spec.WorldRotation = GetOwner() ? GetOwner()->GetActorRotation() : FRotator::ZeroRotator;
 	Spec.OwnerPlayerId = OwnerPlayerId;
 	Spec.TeamId = TeamId;

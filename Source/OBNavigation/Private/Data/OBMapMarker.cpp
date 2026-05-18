@@ -3,6 +3,8 @@
 
 #include "Data/OBMapMarker.h"
 
+#include "OBNavigation.h"
+
 void UOBMapMarker::Init(const FGuid& InID, AActor* InTrackedActor, UOBMarkerConfigAsset* InConfig, FName InLayerName, FVector InStaticLocation)
 {
 	FOBNavigationMarkerSpec Spec;
@@ -51,7 +53,7 @@ void UOBMapMarker::ApplySpec(const FOBNavigationMarkerSpec& InSpec)
 
 	if (TrackedActor.IsValid())
 	{
-		WorldLocation = TrackedActor->GetActorLocation();
+		WorldLocation = OBNavigation::ResolveActorNavigationLocation(TrackedActor.Get());
 		WorldRotation = TrackedActor->GetActorRotation();
 	}
 	else
@@ -65,7 +67,7 @@ void UOBMapMarker::UpdateLocation()
 {
 	if (TrackedActor.IsValid())
 	{
-		WorldLocation = TrackedActor->GetActorLocation();
+		WorldLocation = OBNavigation::ResolveActorNavigationLocation(TrackedActor.Get());
 		WorldRotation = TrackedActor->GetActorRotation();
 	}
 }

@@ -3,8 +3,63 @@
 
 #include "OBNavigationSubsystem.h"
 
+#include "OBNavigation.h"
 #include "OBNavigationDeveloperSettings.h"
 #include "Data/OBNavigationMapRegistryAsset.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
+
+namespace
+{
+	FString FormatNavigationActorBrief(const TCHAR* Label, const AActor* Actor)
+	{
+		if (!Actor)
+		{
+			return FString::Printf(TEXT("%s=None"), Label);
+		}
+
+		return FString::Printf(TEXT("%s='%s' Class='%s' ActorLoc=%s Resolved=[%s]"),
+		                       Label,
+		                       *GetNameSafe(Actor),
+		                       *GetNameSafe(Actor->GetClass()),
+		                       *Actor->GetActorLocation().ToCompactString(),
+		                       *OBNavigation::DescribeActorNavigationLocationSource(Actor));
+	}
+
+	FString DescribeLocalControllerNavigationContext(const UWorld* World)
+	{
+		if (!World)
+		{
+			return TEXT("World=None");
+		}
+
+		TArray<FString> ControllerDescriptions;
+		int32 ControllerIndex = 0;
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			const APlayerController* PlayerController = It->Get();
+			if (!PlayerController)
+			{
+				continue;
+			}
+
+			const AActor* ViewTarget = PlayerController->GetViewTarget();
+			const APlayerCameraManager* CameraManager = PlayerController->PlayerCameraManager;
+			ControllerDescriptions.Add(FString::Printf(
+				TEXT("PC%d='%s' Local=%s ControlRot=%s %s %s CameraLoc=%s"),
+				ControllerIndex,
+				*GetNameSafe(PlayerController),
+				PlayerController->IsLocalController() ? TEXT("true") : TEXT("false"),
+				*PlayerController->GetControlRotation().ToCompactString(),
+				*FormatNavigationActorBrief(TEXT("Pawn"), PlayerController->GetPawn()),
+				*FormatNavigationActorBrief(TEXT("ViewTarget"), ViewTarget),
+				CameraManager ? *CameraManager->GetCameraLocation().ToCompactString() : TEXT("None")));
+			++ControllerIndex;
+		}
+
+		return ControllerDescriptions.Num() > 0 ? FString::Join(ControllerDescriptions, TEXT(" | ")) : TEXT("NoPlayerControllers");
+	}
+}
 
 void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -26,7 +81,6 @@ void UOBNavigationSubsystem::Deinitialize()
 
 void UOBNavigationSubsystem::LoadRegistryData()
 {
-	AllMarkerConfigs.Reset();
 	MarkerConfigsByTag.Reset();
 	bShowDebugMarkers = false;
 
@@ -47,7 +101,6 @@ void UOBNavigationSubsystem::LoadRegistryData()
 		if (Entry.MarkerType.IsValid() && Entry.Config)
 		{
 			MarkerConfigsByTag.Add(Entry.MarkerType, Entry.Config);
-			AllMarkerConfigs.Add(Entry.MarkerType.GetTagName(), Entry.Config);
 		}
 	}
 
@@ -70,8 +123,19 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 	if (PlayerPawn)
 	{
 		TrackedPlayerPawn = PlayerPawn;
+		StartupTrackedPawnTraceLogCount = 0;
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Now tracking pawn: %s"), *GetName(), __FUNCTION__,
 		       *PlayerPawn->GetName());
+		UE_LOG(LogOBNavigation, Log,
+		       TEXT("[%s::%hs] - TrackTrace Pawn='%s' ActorLoc=%s ResolveSource=[%s] LocationCandidates=[%s] ComponentSnapshot=[%s]"),
+		       *GetName(), __FUNCTION__, *GetNameSafe(PlayerPawn), *PlayerPawn->GetActorLocation().ToString(),
+		       *OBNavigation::DescribeActorNavigationLocationSource(PlayerPawn),
+		       *OBNavigation::DescribeActorNavigationLocationCandidates(PlayerPawn),
+		       *OBNavigation::DescribeActorNavigationComponentSnapshot(PlayerPawn));
+		UE_LOG(LogOBNavigation, Log,
+		       TEXT("[%s::%hs] - TrackControllerTrace Pawn='%s' ControllerContext=[%s]"),
+		       *GetName(), __FUNCTION__, *GetNameSafe(PlayerPawn),
+		       *DescribeLocalControllerNavigationContext(GetWorld()));
 		// Force an immediate update
 		UpdateActiveMinimapLayer();
 	}
@@ -98,6 +162,11 @@ bool UOBNavigationSubsystem::GetCurrentMapLayerSpec(FOBNavigationMapLayerSpec& O
 
 	OutLayerSpec = CurrentMapLayerSpec;
 	return true;
+}
+
+void UOBNavigationSubsystem::GetAvailableMapLayerSpecs(TArray<FOBNavigationMapLayerSpec>& OutLayerSpecs) const
+{
+	OutLayerSpecs = AllMapLayerSpecs;
 }
 
 void UOBNavigationSubsystem::SetRuntimeMapLayers(const TArray<FOBNavigationMapLayerSpec>& InMapLayers)
@@ -243,6 +312,24 @@ bool UOBNavigationSubsystem::Tick(float DeltaTime)
 		if (TrackedPlayerPawn.IsValid())
 		{
 			UpdateActiveMinimapLayer();
+
+			const FVector TrackedPawnLocation = OBNavigation::ResolveActorNavigationLocation(TrackedPlayerPawn.Get());
+			const bool bTrackedPawnHasNoXY = FMath::Abs(TrackedPawnLocation.X) <= 1.0f
+				&& FMath::Abs(TrackedPawnLocation.Y) <= 1.0f;
+			const float CurrentTime = MyWorld->GetTimeSeconds();
+			if (bTrackedPawnHasNoXY
+				&& ZeroXYFollowTraceLogCount < 20
+				&& CurrentTime - LastZeroXYFollowTraceTime >= 1.0f)
+			{
+				LastZeroXYFollowTraceTime = CurrentTime;
+				++ZeroXYFollowTraceLogCount;
+				UE_LOG(LogOBNavigation, Warning,
+				       TEXT("[%s::%hs] - ZeroXYFollowTrace #%d TrackedPawn='%s' ResolvedLoc=%s ResolveSource=[%s] ControllerContext=[%s]"),
+				       *GetName(), __FUNCTION__, ZeroXYFollowTraceLogCount,
+				       *GetNameSafe(TrackedPlayerPawn.Get()), *TrackedPawnLocation.ToString(),
+				       *OBNavigation::DescribeActorNavigationLocationSource(TrackedPlayerPawn.Get()),
+				       *DescribeLocalControllerNavigationContext(MyWorld));
+			}
 		}
 	}
 
@@ -268,7 +355,7 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 		return;
 	}
 
-	const FVector PawnLocation = TrackedPlayerPawn->GetActorLocation();
+	const FVector PawnLocation = OBNavigation::ResolveActorNavigationLocation(TrackedPlayerPawn.Get());
 	const FOBNavigationMapLayerSpec* BestLayerSpec = nullptr;
 
 	// Since the array is pre-sorted by priority, the first valid layer we find is the best one.
@@ -279,6 +366,24 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 			BestLayerSpec = &LayerSpec;
 			break; // Found the highest priority layer
 		}
+	}
+
+	static float LastLayerTraceLogTime = -1000.0f;
+	const UWorld* World = GetWorld();
+	const float CurrentTime = World ? World->GetTimeSeconds() : 0.0f;
+	if (StartupTrackedPawnTraceLogCount < 5 || CurrentTime - LastLayerTraceLogTime >= 1.0f)
+	{
+		LastLayerTraceLogTime = CurrentTime;
+		++StartupTrackedPawnTraceLogCount;
+		UE_LOG(LogOBNavigation, Log,
+		       TEXT("[%s::%hs] - LayerTrace #%d Pawn='%s' ResolvedLoc=%s ResolveSource=[%s] BestLayer='%s' CandidateLayerCount=%d CurrentLayer='%s' LocationCandidates=[%s] ComponentSnapshot=[%s]"),
+		       *GetName(), __FUNCTION__, StartupTrackedPawnTraceLogCount,
+		       *GetNameSafe(TrackedPlayerPawn.Get()), *PawnLocation.ToString(),
+		       *OBNavigation::DescribeActorNavigationLocationSource(TrackedPlayerPawn.Get()),
+		       BestLayerSpec ? *BestLayerSpec->LayerName.ToString() : TEXT("None"), AllMapLayerSpecs.Num(),
+		       bHasCurrentMapLayerSpec ? *CurrentMapLayerSpec.LayerName.ToString() : TEXT("None"),
+		       *OBNavigation::DescribeActorNavigationLocationCandidates(TrackedPlayerPawn.Get()),
+		       *OBNavigation::DescribeActorNavigationComponentSnapshot(TrackedPlayerPawn.Get()));
 	}
 
 	// If the best layer has changed, update it and notify listeners

@@ -112,5 +112,5 @@ public:
 
 	// --- DEBUG SETTINGS ---
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug Settings")
-	bool bShowDebugMessages = false;
+	bool bShowDebugMessages = true;
 };

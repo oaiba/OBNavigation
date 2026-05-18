@@ -3,6 +3,7 @@
 
 #include "OBNavigationComponent.h"
 
+#include "OBNavigation.h"
 #include "OBNavigationSubsystem.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerState.h"
@@ -80,11 +81,11 @@ void UOBNavigationComponent::RegisterCharacterMarker()
 			const APawn* OwnerPawn = Cast<APawn>(GetOwner());
 			FOBNavigationMarkerSpec Spec;
 			Spec.MarkerId = CharacterMarkerID;
-			Spec.TrackedActor = GetOwner();
-			Spec.ConfigAsset = CharacterMapMarkerConfig;
-			Spec.LayerName = CharacterMapMarkerLayerName;
-			Spec.WorldLocation = GetOwner()->GetActorLocation();
-			Spec.WorldRotation = GetOwner()->GetActorRotation();
+				Spec.TrackedActor = GetOwner();
+				Spec.ConfigAsset = CharacterMapMarkerConfig;
+				Spec.LayerName = CharacterMapMarkerLayerName;
+				Spec.WorldLocation = OBNavigation::ResolveActorNavigationLocation(GetOwner());
+				Spec.WorldRotation = GetOwner()->GetActorRotation();
 			Spec.VisibilityPolicy = EOBMarkerVisibilityPolicy::LocalOnly;
 			Spec.OwnerPlayerId = OwnerPawn && OwnerPawn->GetPlayerState() ? OwnerPawn->GetPlayerState()->GetPlayerId() : INDEX_NONE;
 			Spec.SortPriority = 100;
