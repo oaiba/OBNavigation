@@ -43,7 +43,7 @@ FGuid UOBNavigationSourceComponent::RegisterOrUpdateNavigationMarker()
 	Spec.ConfigAsset = MarkerConfig;
 	Spec.TrackedActor = bTrackOwner ? GetOwner() : nullptr;
 	Spec.WorldLocation = GetOwner() ? OBNavigation::ResolveActorNavigationLocation(GetOwner()) : FVector::ZeroVector;
-	Spec.WorldRotation = GetOwner() ? GetOwner()->GetActorRotation() : FRotator::ZeroRotator;
+	Spec.WorldRotation = GetOwner() ? OBNavigation::ResolveActorNavigationRotation(GetOwner()) : FRotator::ZeroRotator;
 	Spec.OwnerPlayerId = OwnerPlayerId;
 	Spec.TeamId = TeamId;
 	Spec.VisibilityPolicy = VisibilityPolicy;

@@ -17,10 +17,10 @@ class UTexture2D;
 UENUM(BlueprintType)
 enum class EMinimapRotationSource : uint8
 {
-	// Use the Pawn's Control Rotation (camera direction). Ideal for First-Person / Third-Person games.
-	ControlRotation UMETA(DisplayName = "Control Rotation (Camera)"),
+	// Use the Pawn's Control Rotation (aim/look direction). Ideal when aim yaw is decoupled from body yaw.
+	ControlRotation UMETA(DisplayName = "Control Rotation (Aim/Look)"),
 
-	// Use the Pawn's Actor Rotation (forward direction of the mesh). Ideal for Top-Down / Twin-Stick games.
+	// Use the Pawn's Actor Rotation fallback (forward direction of the actor body).
 	ActorRotation UMETA(DisplayName = "Actor Rotation (Character Forward)")
 };
 
@@ -89,7 +89,7 @@ public:
 	float MaxZoom = 12.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings")
-	EMinimapRotationSource RotationSource = EMinimapRotationSource::ActorRotation;
+	EMinimapRotationSource RotationSource = EMinimapRotationSource::ControlRotation;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings")
 	bool bShouldRotateMap = false;

@@ -93,7 +93,7 @@ void UOBNavigationComponent::RegisterCharacterMarker()
 	Spec.ConfigAsset = CharacterMapMarkerConfig;
 	Spec.LayerName = CharacterMapMarkerLayerName;
 	Spec.WorldLocation = OBNavigation::ResolveActorNavigationLocation(GetOwner());
-	Spec.WorldRotation = GetOwner()->GetActorRotation();
+	Spec.WorldRotation = OBNavigation::ResolveActorNavigationRotation(GetOwner());
 	Spec.SortPriority = 100;
 	// LocalOnly: this marker is only visible to the local client.
 	Spec.VisibilityPolicy = EOBMarkerVisibilityPolicy::LocalOnly;

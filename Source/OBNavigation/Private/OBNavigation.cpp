@@ -5,8 +5,10 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
 #include "MoverComponent.h"
 #include "MoverDataModelTypes.h"
+#include "OBNavigationRotationProvider.h"
 
 DEFINE_LOG_CATEGORY(LogOBNavigation);
 
@@ -145,6 +147,26 @@ FVector OBNavigation::ResolveActorNavigationLocation(const AActor* Actor)
 	FVector ResolvedLocation = FVector::ZeroVector;
 	TryResolveActorNavigationLocation(Actor, ResolvedLocation, nullptr);
 	return ResolvedLocation;
+}
+
+FRotator OBNavigation::ResolveActorNavigationRotation(const AActor* Actor)
+{
+	if (!Actor)
+	{
+		return FRotator::ZeroRotator;
+	}
+
+	if (Actor->GetClass()->ImplementsInterface(UOBNavigationRotationProvider::StaticClass()))
+	{
+		return IOBNavigationRotationProvider::Execute_GetNavigationWorldRotation(const_cast<AActor*>(Actor));
+	}
+
+	if (const APawn* Pawn = Cast<APawn>(Actor); Pawn && Pawn->GetController())
+	{
+		return Pawn->GetControlRotation();
+	}
+
+	return Actor->GetActorRotation();
 }
 
 FString OBNavigation::DescribeActorNavigationLocationCandidates(const AActor* Actor)

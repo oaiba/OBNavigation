@@ -266,7 +266,8 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Cyan, TEXT("--- NAV MAP DEBUG ---"));
 		GEngine->AddOnScreenDebugMessage(
 			-1, 0.0f, FColor::White,
-			FString::Printf(TEXT("Character World Yaw: %.2f"), TrackedPawn->GetActorRotation().Yaw));
+			FString::Printf(TEXT("Navigation World Yaw: %.2f"),
+			                OBNavigation::ResolveActorNavigationRotation(TrackedPawn).Yaw));
 		GEngine->AddOnScreenDebugMessage(
 			-1, 0.0f, FColor::Yellow,
 			FString::Printf(TEXT("Map View Center UV: %s"), *ViewContext.ViewCenterUV.ToString()));
@@ -433,7 +434,7 @@ float UOBMapWidgetBase::GetDynamicMapYaw(const APawn* TrackedPawn) const
 	{
 		return TrackedPawn->GetControlRotation().Yaw;
 	}
-	return TrackedPawn->GetActorRotation().Yaw;
+	return OBNavigation::ResolveActorNavigationRotation(TrackedPawn).Yaw;
 }
 
 float UOBMapWidgetBase::GetTotalStaticRotation() const
@@ -541,7 +542,7 @@ void UOBMapWidgetBase::UpdateMapMarkers(const APawn* TrackedPawn, const FOBNavig
 
 		if (bIsPlayerMarker && ShouldCenterPlayerMarker() && TrackedPawn)
 		{
-			float TargetYaw = TrackedPawn->GetActorRotation().Yaw;
+			float TargetYaw = OBNavigation::ResolveActorNavigationRotation(TrackedPawn).Yaw;
 			if (VisualConfigAsset && VisualConfigAsset->RotationSource == EMinimapRotationSource::ControlRotation)
 			{
 				TargetYaw = TrackedPawn->GetControlRotation().Yaw;

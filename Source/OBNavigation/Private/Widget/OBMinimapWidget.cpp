@@ -98,7 +98,7 @@ float UOBMinimapWidget::GetDynamicMapYaw(const APawn* TrackedPawn) const
 		return TrackedPawn->GetControlRotation().Yaw;
 	case EMinimapRotationSource::ActorRotation:
 	default:
-		return TrackedPawn->GetActorRotation().Yaw;
+		return OBNavigation::ResolveActorNavigationRotation(TrackedPawn).Yaw;
 	}
 }
 

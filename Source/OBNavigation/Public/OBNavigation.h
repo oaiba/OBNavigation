@@ -18,6 +18,13 @@ namespace OBNavigation
 	 */
 	OBNAVIGATION_API FVector ResolveActorNavigationLocation(const AActor* Actor);
 
+	/**
+	 * Resolves the world-space rotation navigation should use for an actor.
+	 * Pawns can expose aim/control yaw independently from body rotation through
+	 * IOBNavigationRotationProvider or a valid Controller.
+	 */
+	OBNAVIGATION_API FRotator ResolveActorNavigationRotation(const AActor* Actor);
+
 	/** Formats candidate actor/component/Mover locations for startup navigation traces. */
 	OBNAVIGATION_API FString DescribeActorNavigationLocationCandidates(const AActor* Actor);
 

@@ -13,7 +13,7 @@ void UOBMapMarker::Init(const FGuid& InID, AActor* InTrackedActor, UOBMarkerConf
 	Spec.ConfigAsset = InConfig;
 	Spec.LayerName = InLayerName;
 	Spec.WorldLocation = InStaticLocation;
-	Spec.WorldRotation = InTrackedActor ? InTrackedActor->GetActorRotation() : FRotator::ZeroRotator;
+	Spec.WorldRotation = InTrackedActor ? OBNavigation::ResolveActorNavigationRotation(InTrackedActor) : FRotator::ZeroRotator;
 	Spec.LifeTime = InConfig ? InConfig->LifeTime : 0.0f;
 	InitFromSpec(Spec);
 }
@@ -54,7 +54,7 @@ void UOBMapMarker::ApplySpec(const FOBNavigationMarkerSpec& InSpec)
 	if (TrackedActor.IsValid())
 	{
 		WorldLocation = OBNavigation::ResolveActorNavigationLocation(TrackedActor.Get());
-		WorldRotation = TrackedActor->GetActorRotation();
+		WorldRotation = OBNavigation::ResolveActorNavigationRotation(TrackedActor.Get());
 	}
 	else
 	{
@@ -68,7 +68,7 @@ void UOBMapMarker::UpdateLocation()
 	if (TrackedActor.IsValid())
 	{
 		WorldLocation = OBNavigation::ResolveActorNavigationLocation(TrackedActor.Get());
-		WorldRotation = TrackedActor->GetActorRotation();
+		WorldRotation = OBNavigation::ResolveActorNavigationRotation(TrackedActor.Get());
 	}
 }
 
