@@ -375,7 +375,7 @@ bool UOBMapWidgetBase::ResolveViewCenterUV(const FOBNavigationMapLayerSpec& Curr
 	bool bSuccess = NavSubsystem->WorldToMapUVChecked(CurrentLayer, PawnLocation, OutViewCenterUV, ProjectionResult);
 	if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
 	{
-		UE_LOG(LogOBNavigation, Log, TEXT("[%s::%hs] - WorldToMapUVChecked result=%s Success=%s UV=%s"), *GetName(), __FUNCTION__, *StaticEnum<EOBMapProjectionResult>()->GetNameStringByValue((int64)ProjectionResult), bSuccess ? TEXT("true") : TEXT("false"), *OutViewCenterUV.ToString());
+		// UE_LOG(LogOBNavigation, Log, TEXT("[%s::%hs] - WorldToMapUVChecked result=%s Success=%s UV=%s"), *GetName(), __FUNCTION__, *StaticEnum<EOBMapProjectionResult>()->GetNameStringByValue((int64)ProjectionResult), bSuccess ? TEXT("true") : TEXT("false"), *OutViewCenterUV.ToString());
 	}
 	return bSuccess;
 }
