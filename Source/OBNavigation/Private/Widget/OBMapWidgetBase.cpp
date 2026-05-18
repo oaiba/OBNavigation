@@ -203,8 +203,7 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 	OnViewContextUpdated(ViewContext, CurrentLayer, TrackedPawn);
 	UpdateMapOverlays(CurrentLayer, ViewContext);
 
-	// Temporarily force bShouldWriteTrace to true to ensure continuous logging every 1 second for debugging
-	const bool bShouldWriteTrace = true; // Original: VisualConfigAsset->bShowDebugMessages || StartupTraceLogCount < 5;
+	const bool bShouldWriteTrace = VisualConfigAsset->bShowDebugMessages || StartupTraceLogCount < 5;
 	if (bShouldWriteTrace)
 	{
 		const UWorld* World = GetWorld();

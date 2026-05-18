@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -11,8 +11,9 @@ class UOBNavigationSubsystem;
 
 /**
  * @class UOBNavigationComponent
- * @brief Component attached to ACharacter to handle local player navigation aspects
- * and register/update character-specific markers with the global subsystem.
+ * @brief Component attached to any APawn (including Mover-based pawns) to handle local player
+ * navigation aspects and register/update the pawn-specific marker with the global subsystem.
+ * Deliberately uses APawn instead of ACharacter so that non-ACharacter Mover pawns are supported.
  */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), Blueprintable, BlueprintType)
 class OBNAVIGATION_API UOBNavigationComponent : public UActorComponent
