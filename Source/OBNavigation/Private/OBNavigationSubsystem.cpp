@@ -7,6 +7,7 @@
 #include "OBNavigationDeveloperSettings.h"
 #include "Data/OBNavigationMapRegistryAsset.h"
 #include "Camera/PlayerCameraManager.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/PlayerController.h"
 
 namespace
@@ -59,6 +60,57 @@ namespace
 
 		return ControllerDescriptions.Num() > 0 ? FString::Join(ControllerDescriptions, TEXT(" | ")) : TEXT("NoPlayerControllers");
 	}
+
+	FString DescribeLayerSelectionCandidates(const TArray<FOBNavigationMapLayerSpec>& LayerSpecs,
+	                                         const FVector& WorldLocation)
+	{
+		TArray<FString> CandidateDescriptions;
+		CandidateDescriptions.Reserve(LayerSpecs.Num());
+
+		for (int32 LayerIndex = 0; LayerIndex < LayerSpecs.Num(); ++LayerIndex)
+		{
+			const FOBNavigationMapLayerSpec& LayerSpec = LayerSpecs[LayerIndex];
+			CandidateDescriptions.Add(FString::Printf(
+				TEXT("#%d Name='%s' Priority=%d ValidBounds=%s InsideXY=%s Clamp=%s CanProject=%s BoundsMin=%s BoundsMax=%s Texture='%s'"),
+				LayerIndex,
+				*LayerSpec.LayerName.ToString(),
+				LayerSpec.Priority,
+				LayerSpec.HasValidWorldBounds() ? TEXT("true") : TEXT("false"),
+				LayerSpec.ContainsWorldLocationXY(WorldLocation) ? TEXT("true") : TEXT("false"),
+				LayerSpec.bClampQueriesToBounds ? TEXT("true") : TEXT("false"),
+				LayerSpec.CanProjectWorldLocation(WorldLocation) ? TEXT("true") : TEXT("false"),
+				*LayerSpec.WorldBounds.Min.ToCompactString(),
+				*LayerSpec.WorldBounds.Max.ToCompactString(),
+				*GetNameSafe(LayerSpec.MapTexture)));
+		}
+
+		return CandidateDescriptions.Num() > 0 ? FString::Join(CandidateDescriptions, TEXT(" | ")) : TEXT("None");
+	}
+
+	void DrawMapLayerBoundsRectangle(const UWorld* World, const FOBNavigationMapLayerSpec& LayerSpec,
+	                                 const float DrawZ, const FColor& Color, const float LifeTime,
+	                                 const float Thickness)
+	{
+		if (!World || !LayerSpec.HasValidWorldBounds())
+		{
+			return;
+		}
+
+		const FVector Min = LayerSpec.WorldBounds.Min;
+		const FVector Max = LayerSpec.WorldBounds.Max;
+		const FVector A(Min.X, Min.Y, DrawZ);
+		const FVector B(Max.X, Min.Y, DrawZ);
+		const FVector C(Max.X, Max.Y, DrawZ);
+		const FVector D(Min.X, Max.Y, DrawZ);
+
+		DrawDebugLine(World, A, B, Color, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, B, C, Color, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, C, D, Color, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, D, A, Color, false, LifeTime, 0, Thickness);
+		DrawDebugLine(World, A, C, FColor(Color.R, Color.G, Color.B, 96), false, LifeTime, 0, 1.0f);
+		DrawDebugLine(World, B, D, FColor(Color.R, Color.G, Color.B, 96), false, LifeTime, 0, 1.0f);
+		DrawDebugString(World, A, LayerSpec.LayerName.ToString(), nullptr, Color, LifeTime, false, 1.0f);
+	}
 }
 
 void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -86,6 +138,9 @@ void UOBNavigationSubsystem::LoadRegistryData()
 
 	const UOBNavigationDeveloperSettings* Settings = GetDefault<UOBNavigationDeveloperSettings>();
 	bShowDebugMarkers = Settings && Settings->bShowDebugMarkers;
+	bDrawDebugMapLayerBounds = Settings && Settings->bDrawDebugMapLayerBounds;
+	bDrawDebugAllMapLayerBounds = !Settings || Settings->bDrawDebugAllMapLayerBounds;
+	DebugMapLayerBoundsZOffset = Settings ? Settings->DebugMapLayerBoundsZOffset : 10.0f;
 
 	UOBNavigationMapRegistryAsset* Registry = Settings ? Settings->DefaultMapRegistry.LoadSynchronous() : nullptr;
 	if (!Registry)
@@ -123,7 +178,8 @@ void UOBNavigationSubsystem::SetTrackedPlayerPawn(APawn* PlayerPawn)
 	if (PlayerPawn)
 	{
 		TrackedPlayerPawn = PlayerPawn;
-		StartupTrackedPawnTraceLogCount = 0;
+		LayerSelectionFailureTraceCount = 0;
+		ZeroXYTraceCount = 0;
 		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Now tracking pawn: %s"), *GetName(), __FUNCTION__,
 		       *PlayerPawn->GetName());
 		UE_LOG(LogOBNavigation, Log,
@@ -312,24 +368,6 @@ bool UOBNavigationSubsystem::Tick(float DeltaTime)
 		if (TrackedPlayerPawn.IsValid())
 		{
 			UpdateActiveMinimapLayer();
-
-			const FVector TrackedPawnLocation = OBNavigation::ResolveActorNavigationLocation(TrackedPlayerPawn.Get());
-			const bool bTrackedPawnHasNoXY = FMath::Abs(TrackedPawnLocation.X) <= 1.0f
-				&& FMath::Abs(TrackedPawnLocation.Y) <= 1.0f;
-			const float CurrentTime = MyWorld->GetTimeSeconds();
-			if (bTrackedPawnHasNoXY
-				&& ZeroXYFollowTraceLogCount < 20
-				&& CurrentTime - LastZeroXYFollowTraceTime >= 1.0f)
-			{
-				LastZeroXYFollowTraceTime = CurrentTime;
-				++ZeroXYFollowTraceLogCount;
-				UE_LOG(LogOBNavigation, Warning,
-				       TEXT("[%s::%hs] - ZeroXYFollowTrace #%d TrackedPawn='%s' ResolvedLoc=%s ResolveSource=[%s] ControllerContext=[%s]"),
-				       *GetName(), __FUNCTION__, ZeroXYFollowTraceLogCount,
-				       *GetNameSafe(TrackedPlayerPawn.Get()), *TrackedPawnLocation.ToString(),
-				       *OBNavigation::DescribeActorNavigationLocationSource(TrackedPlayerPawn.Get()),
-				       *DescribeLocalControllerNavigationContext(MyWorld));
-			}
 		}
 	}
 
@@ -361,33 +399,49 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 	// Since the array is pre-sorted by priority, the first valid layer we find is the best one.
 	for (const FOBNavigationMapLayerSpec& LayerSpec : AllMapLayerSpecs)
 	{
-		if (LayerSpec.ContainsWorldLocationXY(PawnLocation))
+		if (LayerSpec.CanProjectWorldLocation(PawnLocation))
 		{
 			BestLayerSpec = &LayerSpec;
 			break; // Found the highest priority layer
 		}
 	}
 
-	static float LastLayerTraceLogTime = -1000.0f;
+	DrawDebugMapLayerBounds(PawnLocation, BestLayerSpec);
+
 	const UWorld* World = GetWorld();
-	const float CurrentTime = World ? World->GetTimeSeconds() : 0.0f;
-	if (StartupTrackedPawnTraceLogCount < 5 || CurrentTime - LastLayerTraceLogTime >= 1.0f)
+	const bool bLayerChanged = IsDifferentCurrentLayer(BestLayerSpec);
+	const bool bTrackedPawnHasNoXY = FMath::Abs(PawnLocation.X) <= 1.0f && FMath::Abs(PawnLocation.Y) <= 1.0f;
+	const bool bShouldTraceFailure = !BestLayerSpec && LayerSelectionFailureTraceCount < 3;
+	const bool bShouldTraceZeroXY = bTrackedPawnHasNoXY && ZeroXYTraceCount < 3;
+	if (bLayerChanged || bShouldTraceFailure || bShouldTraceZeroXY)
 	{
-		LastLayerTraceLogTime = CurrentTime;
-		++StartupTrackedPawnTraceLogCount;
-		UE_LOG(LogOBNavigation, Log,
-		       TEXT("[%s::%hs] - LayerTrace #%d Pawn='%s' ResolvedLoc=%s ResolveSource=[%s] BestLayer='%s' CandidateLayerCount=%d CurrentLayer='%s' LocationCandidates=[%s] ComponentSnapshot=[%s]"),
-		       *GetName(), __FUNCTION__, StartupTrackedPawnTraceLogCount,
+		if (bShouldTraceFailure)
+		{
+			++LayerSelectionFailureTraceCount;
+		}
+		if (bShouldTraceZeroXY)
+		{
+			++ZeroXYTraceCount;
+		}
+
+		UE_LOG(LogOBNavigation, Warning,
+		       TEXT("[%s::%hs] - LayerSelectionTrace Reason='%s%s%s' Pawn='%s' ResolvedLoc=%s ResolveSource=[%s] BestLayer='%s' CandidateLayerCount=%d CurrentLayer='%s' LayerCandidates=[%s] ControllerContext=[%s] LocationCandidates=[%s] ComponentSnapshot=[%s]"),
+		       *GetName(), __FUNCTION__,
+		       bLayerChanged ? TEXT("LayerChanged") : TEXT(""),
+		       bShouldTraceFailure ? TEXT("|NoProjectableLayer") : TEXT(""),
+		       bShouldTraceZeroXY ? TEXT("|ZeroXY") : TEXT(""),
 		       *GetNameSafe(TrackedPlayerPawn.Get()), *PawnLocation.ToString(),
 		       *OBNavigation::DescribeActorNavigationLocationSource(TrackedPlayerPawn.Get()),
 		       BestLayerSpec ? *BestLayerSpec->LayerName.ToString() : TEXT("None"), AllMapLayerSpecs.Num(),
 		       bHasCurrentMapLayerSpec ? *CurrentMapLayerSpec.LayerName.ToString() : TEXT("None"),
+		       *DescribeLayerSelectionCandidates(AllMapLayerSpecs, PawnLocation),
+		       *DescribeLocalControllerNavigationContext(World),
 		       *OBNavigation::DescribeActorNavigationLocationCandidates(TrackedPlayerPawn.Get()),
 		       *OBNavigation::DescribeActorNavigationComponentSnapshot(TrackedPlayerPawn.Get()));
 	}
 
 	// If the best layer has changed, update it and notify listeners
-	if (IsDifferentCurrentLayer(BestLayerSpec))
+	if (bLayerChanged)
 	{
 		if (BestLayerSpec)
 		{
@@ -400,9 +454,57 @@ void UOBNavigationSubsystem::UpdateActiveMinimapLayer()
 			bHasCurrentMapLayerSpec = false;
 		}
 
-		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Minimap layer changed to: %s"), *GetName(), __FUNCTION__,
-		       BestLayerSpec ? *BestLayerSpec->LayerName.ToString() : TEXT("None"));
 		OnNavigationMapLayerSpecChanged.Broadcast(CurrentMapLayerSpec);
+	}
+}
+
+void UOBNavigationSubsystem::DrawDebugMapLayerBounds(const FVector& PawnLocation,
+                                                     const FOBNavigationMapLayerSpec* BestLayerSpec) const
+{
+	if (!bDrawDebugMapLayerBounds && !bShowDebugMarkers)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	constexpr float BoundsLifeTime = 0.0f;
+	constexpr float BoundsThickness = 8.0f;
+	const float DrawZ = PawnLocation.Z + DebugMapLayerBoundsZOffset;
+
+	if (bDrawDebugAllMapLayerBounds)
+	{
+		for (const FOBNavigationMapLayerSpec& LayerSpec : AllMapLayerSpecs)
+		{
+			const bool bIsSelectedLayer = BestLayerSpec == &LayerSpec;
+			const bool bContainsPawn = LayerSpec.ContainsWorldLocationXY(PawnLocation);
+			const bool bCanProjectPawn = LayerSpec.CanProjectWorldLocation(PawnLocation);
+			const FColor BoundsColor = bIsSelectedLayer
+				                           ? FColor::Green
+				                           : bContainsPawn
+					                           ? FColor::Cyan
+					                           : bCanProjectPawn
+						                           ? FColor::Yellow
+						                           : FColor::Red;
+			DrawMapLayerBoundsRectangle(World, LayerSpec, DrawZ, BoundsColor, BoundsLifeTime, BoundsThickness);
+		}
+		return;
+	}
+
+	if (BestLayerSpec)
+	{
+		DrawMapLayerBoundsRectangle(World, *BestLayerSpec, DrawZ, FColor::Green, BoundsLifeTime, BoundsThickness);
+	}
+	else
+	{
+		for (const FOBNavigationMapLayerSpec& LayerSpec : AllMapLayerSpecs)
+		{
+			DrawMapLayerBoundsRectangle(World, LayerSpec, DrawZ, FColor::Red, BoundsLifeTime, BoundsThickness);
+		}
 	}
 }
 

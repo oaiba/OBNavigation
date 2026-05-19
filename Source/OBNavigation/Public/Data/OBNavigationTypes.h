@@ -172,6 +172,7 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 
 	bool HasValidWorldBounds() const;
 	bool ContainsWorldLocationXY(const FVector& WorldLocation) const;
+	bool CanProjectWorldLocation(const FVector& WorldLocation) const;
 	bool ProjectWorldToMapUVChecked(const FVector& WorldLocation, FVector2D& OutMapUV,
 	                                EOBMapProjectionResult& OutResult) const;
 };

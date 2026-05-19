@@ -129,20 +129,10 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 		if (OverlayWidget)
 		{
 			OverlayWidget->ClearOverlayContext();
-			}
-			ApplyMapLayer(FOBNavigationMapLayerSpec());
-			if (VisualConfigAsset->bShowDebugMessages || StartupTraceLogCount < 5)
-			{
-				++StartupTraceLogCount;
-				UE_LOG(LogOBNavigation, Warning,
-				       TEXT("[%s::%hs] - Trace #%d No active layer. TrackedPawn='%s' MapMaterial=%s Debug=%s"),
-				       *GetName(), __FUNCTION__, StartupTraceLogCount,
-				       *GetNameSafe(NavSubsystem ? NavSubsystem->GetTrackedPlayerPawn() : nullptr),
-				       MapMaterialInstance ? TEXT("Valid") : TEXT("Invalid"),
-				       VisualConfigAsset->bShowDebugMessages ? TEXT("true") : TEXT("false"));
-			}
-			return;
 		}
+		ApplyMapLayer(FOBNavigationMapLayerSpec());
+		return;
+	}
 
 	ApplyMapLayer(CurrentLayer);
 
@@ -150,46 +140,11 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 	if (TrackedPawn && !PlayerMarkerID.IsValid())
 	{
 		PlayerMarkerID = NavSubsystem->GetMarkerIDForActor(const_cast<APawn*>(TrackedPawn));
-		if (VisualConfigAsset->bShowDebugMessages)
-		{
-			UE_LOG(LogOBNavigation, Log,
-			       TEXT("[%s::%hs] - Resolved player marker after tick. Pawn='%s' PlayerMarkerID=%s"),
-			       *GetName(), __FUNCTION__, *GetNameSafe(TrackedPawn), *PlayerMarkerID.ToString());
-		}
 	}
 
 	FVector2D ViewCenterUV;
 	if (!ResolveViewCenterUV(CurrentLayer, TrackedPawn, ViewCenterUV))
 	{
-		FVector2D DirectPawnUV = FVector2D::ZeroVector;
-		EOBMapProjectionResult ProjectionResult = EOBMapProjectionResult::NoLayer;
-		const bool bDirectProjectionSucceeded = TrackedPawn
-			                                        && NavSubsystem->WorldToMapUVChecked(
-				                                        CurrentLayer,
-				                                        OBNavigation::ResolveActorNavigationLocation(TrackedPawn),
-				                                        DirectPawnUV,
-				                                        ProjectionResult);
-			const FVector ResolvedPawnLocation = TrackedPawn
-				                                      ? OBNavigation::ResolveActorNavigationLocation(TrackedPawn)
-				                                      : FVector::ZeroVector;
-			if (VisualConfigAsset->bShowDebugMessages || StartupTraceLogCount < 5)
-			{
-				++StartupTraceLogCount;
-				UE_LOG(LogOBNavigation, Warning,
-				       TEXT("[%s::%hs] - Trace #%d Failed to resolve view center. Layer='%s' Pawn='%s' ActorLoc=%s ResolvedLoc=%s ResolveSource=[%s] DirectProjection=%s Result=%s DirectUV=%s BoundsMin=%s BoundsMax=%s LocationCandidates=[%s] ComponentSnapshot=[%s] Debug=%s"),
-				       *GetName(), __FUNCTION__, StartupTraceLogCount, *CurrentLayer.LayerName.ToString(),
-				       *GetNameSafe(TrackedPawn),
-				       TrackedPawn ? *TrackedPawn->GetActorLocation().ToString() : TEXT("None"),
-				       *ResolvedPawnLocation.ToString(),
-				       *OBNavigation::DescribeActorNavigationLocationSource(TrackedPawn),
-				       bDirectProjectionSucceeded ? TEXT("true") : TEXT("false"),
-				       *StaticEnum<EOBMapProjectionResult>()->GetNameStringByValue(static_cast<int64>(ProjectionResult)),
-				       *DirectPawnUV.ToString(), *CurrentLayer.WorldBounds.Min.ToString(),
-				       *CurrentLayer.WorldBounds.Max.ToString(),
-				       *OBNavigation::DescribeActorNavigationLocationCandidates(TrackedPawn),
-				       *OBNavigation::DescribeActorNavigationComponentSnapshot(TrackedPawn),
-				       VisualConfigAsset->bShowDebugMessages ? TEXT("true") : TEXT("false"));
-			}
 		ClearMarkerWidgets();
 		if (OverlayWidget)
 		{
@@ -202,40 +157,6 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 	UpdateMapMaterial(ViewContext);
 	OnViewContextUpdated(ViewContext, CurrentLayer, TrackedPawn);
 	UpdateMapOverlays(CurrentLayer, ViewContext);
-
-	const bool bShouldWriteTrace = VisualConfigAsset->bShowDebugMessages || StartupTraceLogCount < 5;
-	if (bShouldWriteTrace)
-	{
-		const UWorld* World = GetWorld();
-		const float CurrentTime = World ? World->GetTimeSeconds() : 0.0f;
-		if (StartupTraceLogCount < 5 || CurrentTime - LastDebugTraceLogTime >= 1.0f)
-		{
-			LastDebugTraceLogTime = CurrentTime;
-			++StartupTraceLogCount;
-			const FVector2D CanvasSize = GetMarkerCanvas()
-				                             ? GetMarkerCanvas()->GetCachedGeometry().GetLocalSize()
-				                             : FVector2D::ZeroVector;
-			const int32 VisibleMarkerCount = NavSubsystem->GetVisibleMarkers(GetNavigationSurface()).Num();
-			const FVector ResolvedPawnLocation = TrackedPawn
-				                                      ? OBNavigation::ResolveActorNavigationLocation(TrackedPawn)
-				                                      : FVector::ZeroVector;
-			UE_LOG(LogOBNavigation, Log,
-			       TEXT("[%s::%hs] - Trace #%d Surface=%s Layer='%s' Texture='%s' Pawn='%s' ActorLoc=%s ResolvedLoc=%s ResolveSource=[%s] ViewCenterUV=%s Zoom=%.2f StaticRot=%.2f DynamicYaw=%.2f Rotate=%s Canvas=%s PlayerMarkerID=%s VisibleMarkers=%d LocationCandidates=[%s] ComponentSnapshot=[%s] Debug=%s"),
-			       *GetName(), __FUNCTION__, StartupTraceLogCount,
-			       *StaticEnum<EOBNavigationSurface>()->GetNameStringByValue(
-				       static_cast<int64>(GetNavigationSurface())),
-			       *CurrentLayer.LayerName.ToString(), *GetNameSafe(CurrentLayer.MapTexture), *GetNameSafe(TrackedPawn),
-			       TrackedPawn ? *TrackedPawn->GetActorLocation().ToString() : TEXT("None"),
-			       *ResolvedPawnLocation.ToString(), *OBNavigation::DescribeActorNavigationLocationSource(TrackedPawn),
-			       *ViewCenterUV.ToString(),
-			       CurrentZoom, ViewContext.TotalStaticRotation, ViewContext.DynamicMapYaw,
-			       ViewContext.bShouldRotateMap ? TEXT("true") : TEXT("false"), *CanvasSize.ToString(),
-			       *PlayerMarkerID.ToString(), VisibleMarkerCount,
-			       *OBNavigation::DescribeActorNavigationLocationCandidates(TrackedPawn),
-			       *OBNavigation::DescribeActorNavigationComponentSnapshot(TrackedPawn),
-			       VisualConfigAsset->bShowDebugMessages ? TEXT("true") : TEXT("false"));
-		}
-	}
 
 	TSet<FGuid> HandledMarkerIDs;
 	if (GetMarkerCanvas())
@@ -367,18 +288,12 @@ bool UOBMapWidgetBase::ResolveViewCenterUV(const FOBNavigationMapLayerSpec& Curr
 {
 	if (!NavSubsystem || !TrackedPawn)
 	{
-		UE_LOG(LogOBNavigation, Warning, TEXT("[%s::%hs] - ResolveViewCenterUV early exit: missing NavSubsystem or TrackedPawn."), *GetName(), __FUNCTION__);
 		return false;
 	}
 
 	EOBMapProjectionResult ProjectionResult = EOBMapProjectionResult::NoLayer;
 	const FVector PawnLocation = OBNavigation::ResolveActorNavigationLocation(TrackedPawn);
-	bool bSuccess = NavSubsystem->WorldToMapUVChecked(CurrentLayer, PawnLocation, OutViewCenterUV, ProjectionResult);
-	if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
-	{
-		// UE_LOG(LogOBNavigation, Log, TEXT("[%s::%hs] - WorldToMapUVChecked result=%s Success=%s UV=%s"), *GetName(), __FUNCTION__, *StaticEnum<EOBMapProjectionResult>()->GetNameStringByValue((int64)ProjectionResult), bSuccess ? TEXT("true") : TEXT("false"), *OutViewCenterUV.ToString());
-	}
-	return bSuccess;
+	return NavSubsystem->WorldToMapUVChecked(CurrentLayer, PawnLocation, OutViewCenterUV, ProjectionResult);
 }
 
 FOBNavigationMapViewContext UOBMapWidgetBase::BuildViewContext(const FOBNavigationMapLayerSpec& CurrentLayer,
@@ -472,57 +387,17 @@ void UOBMapWidgetBase::UpdateMapMarkers(const APawn* TrackedPawn, const FOBNavig
 	UCanvasPanel* MarkerCanvas = GetMarkerCanvas();
 	if (!MarkerWidgetClass || !MarkerCanvas || !NavSubsystem || !VisualConfigAsset)
 	{
-		if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
-		{
-			UE_LOG(LogOBNavigation, Warning,
-			       TEXT("[%s::%hs] - Marker update skipped. MarkerWidgetClass='%s' MarkerCanvas='%s' NavSubsystem='%s' VisualConfig='%s'"),
-			       *GetName(), __FUNCTION__, *GetNameSafe(MarkerWidgetClass), *GetNameSafe(MarkerCanvas),
-			       *GetNameSafe(NavSubsystem), *GetNameSafe(VisualConfigAsset));
-		}
 		return;
 	}
 
 	const FVector2D CanvasSize = MarkerCanvas->GetCachedGeometry().GetLocalSize();
 	if (CanvasSize.X <= 0.0f || CanvasSize.Y <= 0.0f)
 	{
-		if (VisualConfigAsset->bShowDebugMessages)
-		{
-			UE_LOG(LogOBNavigation, Warning,
-			       TEXT("[%s::%hs] - Marker update skipped because marker canvas has no size. CanvasSize=%s"),
-			       *GetName(), __FUNCTION__, *CanvasSize.ToString());
-		}
 		return;
 	}
 
 	const FVector2D CanvasCenter = CanvasSize * 0.5f;
 	const TArray<UOBMapMarker*> VisibleMarkers = NavSubsystem->GetVisibleMarkers(GetNavigationSurface());
-	if (VisualConfigAsset->bShowDebugMessages && PlayerMarkerID.IsValid())
-	{
-		bool bFoundPlayerMarker = false;
-		for (const UOBMapMarker* Marker : VisibleMarkers)
-		{
-			if (Marker && Marker->MarkerID == PlayerMarkerID)
-			{
-				bFoundPlayerMarker = true;
-				break;
-			}
-		}
-
-		if (!bFoundPlayerMarker)
-		{
-			const UWorld* World = GetWorld();
-			const float CurrentTime = World ? World->GetTimeSeconds() : 0.0f;
-			if (CurrentTime - LastMarkerWarningLogTime >= 1.0f)
-			{
-				LastMarkerWarningLogTime = CurrentTime;
-				UE_LOG(LogOBNavigation, Warning,
-				       TEXT("[%s::%hs] - Player marker id is valid but not visible on this surface. Surface=%s PlayerMarkerID=%s VisibleMarkers=%d"),
-				       *GetName(), __FUNCTION__, *StaticEnum<EOBNavigationSurface>()->GetNameStringByValue(
-					       static_cast<int64>(GetNavigationSurface())),
-				       *PlayerMarkerID.ToString(), VisibleMarkers.Num());
-			}
-		}
-	}
 	for (UOBMapMarker* Marker : VisibleMarkers)
 	{
 		if (!Marker || !Marker->ConfigAsset || !ShouldShowMarker(Marker))

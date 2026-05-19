@@ -369,16 +369,6 @@ protected:
 	/** GUID of the tracked player's own map marker. */
 	FGuid PlayerMarkerID;
 
-private:
-	/** Last time a verbose map-state trace was written. */
-	float LastDebugTraceLogTime = -1000.0f;
-
-	/** Last time a marker-specific warning was written. */
-	float LastMarkerWarningLogTime = -1000.0f;
-
-	/** Number of startup trace lines written regardless of debug flag. */
-	int32 StartupTraceLogCount = 0;
-
 	/** Last layer name applied to the map material. */
 	FName AppliedLayerName = NAME_None;
 

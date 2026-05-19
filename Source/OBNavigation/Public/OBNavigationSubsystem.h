@@ -299,6 +299,9 @@ private:
 	/** Re-evaluates which layer in AllMapLayerSpecs should be "current" based on the tracked pawn's position. */
 	void UpdateActiveMinimapLayer();
 
+	/** Draws world-space debug outlines for minimap layer XY bounds. */
+	void DrawDebugMapLayerBounds(const FVector& PawnLocation, const FOBNavigationMapLayerSpec* BestLayerSpec) const;
+
 	/** Iterates all active markers and calls UpdateLocation() on each. Handles lifetime expiration for temporary markers. */
 	void UpdateAllMarkers(float DeltaTime);
 
@@ -367,14 +370,11 @@ private:
 	/** Guard flag: true once at least one valid layer has been selected. */
 	bool bHasCurrentMapLayerSpec = false;
 
-	/** Emits a few startup diagnostics for tracked pawn location/layer resolution. */
-	int32 StartupTrackedPawnTraceLogCount = 0;
+	/** Caps no-layer diagnostics so tick-driven layer resolution does not spam logs. */
+	int32 LayerSelectionFailureTraceCount = 0;
 
-	/** Throttles diagnostics for pawns that never publish XY movement. */
-	float LastZeroXYFollowTraceTime = -1000.0f;
-
-	/** Caps repeated zero-XY diagnostics in long sessions. */
-	int32 ZeroXYFollowTraceLogCount = 0;
+	/** Caps diagnostics for pawns that never publish XY movement. */
+	int32 ZeroXYTraceCount = 0;
 
 	// -----------------------------------------------------------------------
 	//  Marker Pool
@@ -418,4 +418,13 @@ private:
 
 	/** Mirror of UOBNavigationDeveloperSettings::bShowDebugMarkers, cached at Initialize(). */
 	bool bShowDebugMarkers = false;
+
+	/** Mirror of UOBNavigationDeveloperSettings::bDrawDebugMapLayerBounds. */
+	bool bDrawDebugMapLayerBounds = false;
+
+	/** Mirror of UOBNavigationDeveloperSettings::bDrawDebugAllMapLayerBounds. */
+	bool bDrawDebugAllMapLayerBounds = true;
+
+	/** Mirror of UOBNavigationDeveloperSettings::DebugMapLayerBoundsZOffset. */
+	float DebugMapLayerBoundsZOffset = 10.0f;
 };

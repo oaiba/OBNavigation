@@ -42,6 +42,11 @@ bool FOBNavigationMapLayerSpec::ContainsWorldLocationXY(const FVector& WorldLoca
 	return HasValidWorldBounds() && IsInsideOrOnBoundsXY(WorldBounds, WorldLocation);
 }
 
+bool FOBNavigationMapLayerSpec::CanProjectWorldLocation(const FVector& WorldLocation) const
+{
+	return ContainsWorldLocationXY(WorldLocation) || (bClampQueriesToBounds && HasValidWorldBounds());
+}
+
 bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldLocation, FVector2D& OutMapUV,
                                                            EOBMapProjectionResult& OutResult) const
 {

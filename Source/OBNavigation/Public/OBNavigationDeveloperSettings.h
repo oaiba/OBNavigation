@@ -48,4 +48,20 @@ public:
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation")
 	bool bShowDebugMarkers = false;
+
+	/**
+	 * Draws the world-space XY bounds used by minimap layer selection. The
+	 * outline is rendered around the tracked pawn height so it remains visible
+	 * even when map capture bounds have a low Z range.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug")
+	bool bDrawDebugMapLayerBounds = false;
+
+	/** Draw every available layer bound instead of only the selected/failing candidate bounds. */
+	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug", meta = (EditCondition = "bDrawDebugMapLayerBounds"))
+	bool bDrawDebugAllMapLayerBounds = true;
+
+	/** Vertical offset added to the tracked pawn Z when drawing minimap bounds. */
+	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug", meta = (EditCondition = "bDrawDebugMapLayerBounds"))
+	float DebugMapLayerBoundsZOffset = 10.0f;
 };
