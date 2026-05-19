@@ -422,8 +422,11 @@ private:
 	/** Mirror of UOBNavigationDeveloperSettings::bDrawDebugMapLayerBounds. */
 	bool bDrawDebugMapLayerBounds = false;
 
+	/** Mirror of UOBNavigationDeveloperSettings::bDrawDebugActiveMapLayerBounds. */
+	bool bDrawDebugActiveMapLayerBounds = true;
+
 	/** Mirror of UOBNavigationDeveloperSettings::bDrawDebugAllMapLayerBounds. */
-	bool bDrawDebugAllMapLayerBounds = true;
+	bool bDrawDebugAllMapLayerBounds = false;
 
 	/** Mirror of UOBNavigationDeveloperSettings::DebugMapLayerBoundsZOffset. */
 	float DebugMapLayerBoundsZOffset = 10.0f;

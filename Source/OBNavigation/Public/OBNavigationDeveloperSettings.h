@@ -57,9 +57,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug")
 	bool bDrawDebugMapLayerBounds = false;
 
-	/** Draw every available layer bound instead of only the selected/failing candidate bounds. */
+	/** Draw the currently selected/active minimap layer bound. */
 	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug", meta = (EditCondition = "bDrawDebugMapLayerBounds"))
-	bool bDrawDebugAllMapLayerBounds = true;
+	bool bDrawDebugActiveMapLayerBounds = true;
+
+	/** Draw every available layer bound in addition to the active layer bound. */
+	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug", meta = (EditCondition = "bDrawDebugMapLayerBounds"))
+	bool bDrawDebugAllMapLayerBounds = false;
 
 	/** Vertical offset added to the tracked pawn Z when drawing minimap bounds. */
 	UPROPERTY(Config, EditAnywhere, Category = "OBNavigation|Debug", meta = (EditCondition = "bDrawDebugMapLayerBounds"))

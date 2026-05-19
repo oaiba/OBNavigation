@@ -139,7 +139,8 @@ void UOBNavigationSubsystem::LoadRegistryData()
 	const UOBNavigationDeveloperSettings* Settings = GetDefault<UOBNavigationDeveloperSettings>();
 	bShowDebugMarkers = Settings && Settings->bShowDebugMarkers;
 	bDrawDebugMapLayerBounds = Settings && Settings->bDrawDebugMapLayerBounds;
-	bDrawDebugAllMapLayerBounds = !Settings || Settings->bDrawDebugAllMapLayerBounds;
+	bDrawDebugActiveMapLayerBounds = !Settings || Settings->bDrawDebugActiveMapLayerBounds;
+	bDrawDebugAllMapLayerBounds = Settings && Settings->bDrawDebugAllMapLayerBounds;
 	DebugMapLayerBoundsZOffset = Settings ? Settings->DebugMapLayerBoundsZOffset : 10.0f;
 
 	UOBNavigationMapRegistryAsset* Registry = Settings ? Settings->DefaultMapRegistry.LoadSynchronous() : nullptr;
@@ -476,11 +477,21 @@ void UOBNavigationSubsystem::DrawDebugMapLayerBounds(const FVector& PawnLocation
 	constexpr float BoundsThickness = 8.0f;
 	const float DrawZ = PawnLocation.Z + DebugMapLayerBoundsZOffset;
 
+	if (bDrawDebugActiveMapLayerBounds && BestLayerSpec)
+	{
+		DrawMapLayerBoundsRectangle(World, *BestLayerSpec, DrawZ, FColor::Green, BoundsLifeTime, BoundsThickness);
+	}
+
 	if (bDrawDebugAllMapLayerBounds)
 	{
 		for (const FOBNavigationMapLayerSpec& LayerSpec : AllMapLayerSpecs)
 		{
 			const bool bIsSelectedLayer = BestLayerSpec == &LayerSpec;
+			if (bIsSelectedLayer && bDrawDebugActiveMapLayerBounds)
+			{
+				continue;
+			}
+
 			const bool bContainsPawn = LayerSpec.ContainsWorldLocationXY(PawnLocation);
 			const bool bCanProjectPawn = LayerSpec.CanProjectWorldLocation(PawnLocation);
 			const FColor BoundsColor = bIsSelectedLayer
@@ -495,11 +506,7 @@ void UOBNavigationSubsystem::DrawDebugMapLayerBounds(const FVector& PawnLocation
 		return;
 	}
 
-	if (BestLayerSpec)
-	{
-		DrawMapLayerBoundsRectangle(World, *BestLayerSpec, DrawZ, FColor::Green, BoundsLifeTime, BoundsThickness);
-	}
-	else
+	if (!BestLayerSpec)
 	{
 		for (const FOBNavigationMapLayerSpec& LayerSpec : AllMapLayerSpecs)
 		{
