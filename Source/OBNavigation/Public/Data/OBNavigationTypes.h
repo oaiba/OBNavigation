@@ -9,6 +9,8 @@ class UMinimapDefinitionDataAsset;
 class UOBMarkerConfigAsset;
 class UTexture2D;
 
+struct FOBNavigationMapLayerSpec;
+
 UENUM(BlueprintType)
 enum class EOBNavigationSurface : uint8
 {
@@ -60,9 +62,26 @@ struct OBNAVIGATION_API FOBNavigationCanvasProjection
 	bool bIsClampedToEdge = false;
 };
 
+/**
+ * Aspect-preserving content rect used to project map UVs inside a widget canvas.
+ */
+struct OBNAVIGATION_API FOBNavigationMapViewport
+{
+	FVector2D RawCanvasSize = FVector2D::ZeroVector;
+	FVector2D Origin = FVector2D::ZeroVector;
+	FVector2D Size = FVector2D::ZeroVector;
+	float AspectRatio = 1.0f;
+
+	FVector2D GetCenter() const { return Origin + Size * 0.5f; }
+	bool IsValid() const { return Size.X > 0.0f && Size.Y > 0.0f; }
+};
+
 namespace OBNavigation::MapView
 {
 	OBNAVIGATION_API bool ProjectUVToCanvas(const FVector2D& MapUV, const FVector2D& CanvasSize,
+	                                        const FOBNavigationMapViewContext& ViewContext,
+	                                        FOBNavigationCanvasProjection& OutProjection);
+	OBNAVIGATION_API bool ProjectUVToCanvas(const FVector2D& MapUV, const FOBNavigationMapViewport& MapViewport,
 	                                        const FOBNavigationMapViewContext& ViewContext,
 	                                        FOBNavigationCanvasProjection& OutProjection);
 }
@@ -185,6 +204,12 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 	bool ProjectWorldToMapUVChecked(const FVector& WorldLocation, FVector2D& OutMapUV,
 	                                EOBMapProjectionResult& OutResult) const;
 };
+
+namespace OBNavigation::MapView
+{
+	OBNAVIGATION_API FOBNavigationMapViewport CalculateMapViewport(const FVector2D& CanvasSize,
+	                                                               const FOBNavigationMapLayerSpec& LayerSpec);
+}
 
 USTRUCT(BlueprintType)
 struct OBNAVIGATION_API FOBNavigationMarkerSpec

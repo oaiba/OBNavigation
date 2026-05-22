@@ -304,6 +304,13 @@ protected:
 	void UpdateMapMaterial(const FOBNavigationMapViewContext& ViewContext);
 
 	/**
+	 * Fits the single-texture/fallback map image to the active map aspect ratio.
+	 *
+	 * @param CurrentLayer The active map layer that defines output aspect.
+	 */
+	void UpdateMapImageViewport(const FOBNavigationMapLayerSpec& CurrentLayer);
+
+	/**
 	 * Updates tiled map images when the active layer is backed by a Panoramic tile set.
 	 *
 	 * @param CurrentLayer The active tiled layer.
@@ -434,9 +441,18 @@ protected:
 	/** Prevents repeated circle-mask material warnings. */
 	bool bWarnedMissingTiledMapTileMaterial = false;
 
+	/** Prevents repeated warnings when MapImage cannot be runtime-fit to the map viewport. */
+	bool bWarnedMapImageNonCanvasSlot = false;
+
 	/** Last tile manager state logged for this layer. */
 	EOBMapTileManagerState LastLoggedTileManagerState = EOBMapTileManagerState::Uninitialized;
 
 	/** Last active LOD whose tactical tile placements were logged. */
 	int32 LastLoggedTacticalTileLOD = INDEX_NONE;
+
+	/** Last tactical viewport state logged for diagnostics. */
+	FVector2D LastLoggedTacticalViewportOrigin = FVector2D(-1.0f, -1.0f);
+
+	/** Last tactical viewport size logged for diagnostics. */
+	FVector2D LastLoggedTacticalViewportSize = FVector2D(-1.0f, -1.0f);
 };

@@ -210,6 +210,48 @@ float FOBNavigationMapViewContext::GetAppliedRotationDegrees() const
 	return bShouldRotateMap ? -(TotalStaticRotation + DynamicMapYaw) : -TotalStaticRotation;
 }
 
+FOBNavigationMapViewport OBNavigation::MapView::CalculateMapViewport(const FVector2D& CanvasSize,
+                                                                      const FOBNavigationMapLayerSpec& LayerSpec)
+{
+	FOBNavigationMapViewport Viewport;
+	Viewport.RawCanvasSize = CanvasSize;
+	if (CanvasSize.X <= 0.0f || CanvasSize.Y <= 0.0f)
+	{
+		return Viewport;
+	}
+
+	float DesiredAspectRatio = 1.0f;
+	if (LayerSpec.OutputSize.X > 0 && LayerSpec.OutputSize.Y > 0)
+	{
+		DesiredAspectRatio = static_cast<float>(LayerSpec.OutputSize.X) / static_cast<float>(LayerSpec.OutputSize.Y);
+	}
+	else if (LayerSpec.HasValidWorldBounds())
+	{
+		const FVector WorldSize = LayerSpec.WorldBounds.GetSize();
+		if (!FMath::IsNearlyZero(WorldSize.Y))
+		{
+			DesiredAspectRatio = FMath::Abs(WorldSize.X / WorldSize.Y);
+		}
+	}
+	DesiredAspectRatio = FMath::Max(DesiredAspectRatio, KINDA_SMALL_NUMBER);
+
+	const float CanvasAspectRatio = CanvasSize.X / CanvasSize.Y;
+	if (CanvasAspectRatio > DesiredAspectRatio)
+	{
+		Viewport.Size.Y = CanvasSize.Y;
+		Viewport.Size.X = CanvasSize.Y * DesiredAspectRatio;
+	}
+	else
+	{
+		Viewport.Size.X = CanvasSize.X;
+		Viewport.Size.Y = CanvasSize.X / DesiredAspectRatio;
+	}
+
+	Viewport.Origin = (CanvasSize - Viewport.Size) * 0.5f;
+	Viewport.AspectRatio = DesiredAspectRatio;
+	return Viewport;
+}
+
 bool OBNavigation::MapView::ProjectUVToCanvas(const FVector2D& MapUV, const FVector2D& CanvasSize,
                                               const FOBNavigationMapViewContext& ViewContext,
                                               FOBNavigationCanvasProjection& OutProjection)
@@ -219,16 +261,34 @@ bool OBNavigation::MapView::ProjectUVToCanvas(const FVector2D& MapUV, const FVec
 		return false;
 	}
 
-	const FVector2D CanvasCenter = CanvasSize * 0.5f;
+	FOBNavigationMapViewport FullViewport;
+	FullViewport.RawCanvasSize = CanvasSize;
+	FullViewport.Origin = FVector2D::ZeroVector;
+	FullViewport.Size = CanvasSize;
+	FullViewport.AspectRatio = CanvasSize.Y > 0.0f ? CanvasSize.X / CanvasSize.Y : 1.0f;
+	return ProjectUVToCanvas(MapUV, FullViewport, ViewContext, OutProjection);
+}
+
+bool OBNavigation::MapView::ProjectUVToCanvas(const FVector2D& MapUV,
+                                              const FOBNavigationMapViewport& MapViewport,
+                                              const FOBNavigationMapViewContext& ViewContext,
+                                              FOBNavigationCanvasProjection& OutProjection)
+{
+	if (!MapViewport.IsValid())
+	{
+		return false;
+	}
+
+	const FVector2D CanvasCenter = MapViewport.GetCenter();
 	const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-	const FVector2D PixelOffset = (MapUV - ViewContext.ViewCenterUV) * CanvasSize * SafeZoom;
+	const FVector2D PixelOffset = (MapUV - ViewContext.ViewCenterUV) * MapViewport.Size * SafeZoom;
 	const FVector2D RotatedPixelOffset = PixelOffset.GetRotated(ViewContext.GetAppliedRotationDegrees());
 
 	OutProjection.RotatedPixelOffset = RotatedPixelOffset;
 	OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset;
 	OutProjection.bIsClampedToEdge = false;
 
-	const float MapRadius = FMath::Min(CanvasCenter.X, CanvasCenter.Y);
+	const float MapRadius = FMath::Min(MapViewport.Size.X, MapViewport.Size.Y) * 0.5f;
 	if (ViewContext.bClampToCanvas && MapRadius > 0.0f && RotatedPixelOffset.SizeSquared() > FMath::Square(MapRadius))
 	{
 		OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset.GetSafeNormal() * MapRadius;

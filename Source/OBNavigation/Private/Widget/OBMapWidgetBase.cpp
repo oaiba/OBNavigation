@@ -162,6 +162,7 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 
 	const FOBNavigationMapViewContext ViewContext = BuildViewContext(CurrentLayer, TrackedPawn, ViewCenterUV);
 	UpdateMapMaterial(ViewContext);
+	UpdateMapImageViewport(CurrentLayer);
 	UpdateMapTiles(CurrentLayer, ViewContext);
 	OnViewContextUpdated(ViewContext, CurrentLayer, TrackedPawn);
 	UpdateMapOverlays(CurrentLayer, ViewContext);
@@ -203,6 +204,16 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 		GEngine->AddOnScreenDebugMessage(
 			-1, 0.0f, FColor::Yellow,
 			FString::Printf(TEXT("Map Static Rotation: %.2f deg"), ViewContext.TotalStaticRotation));
+		if (const UCanvasPanel* MarkerCanvas = GetMarkerCanvas())
+		{
+			const FOBNavigationMapViewport DebugViewport = OBNavigation::MapView::CalculateMapViewport(
+				MarkerCanvas->GetCachedGeometry().GetLocalSize(),
+				CurrentLayer);
+			GEngine->AddOnScreenDebugMessage(
+				-1, 0.0f, FColor::Yellow,
+				FString::Printf(TEXT("Map Viewport: Origin=%s Size=%s"),
+					*DebugViewport.Origin.ToString(), *DebugViewport.Size.ToString()));
+		}
 	}
 }
 
@@ -389,6 +400,42 @@ void UOBMapWidgetBase::UpdateMapMaterial(const FOBNavigationMapViewContext& View
 	MapMaterialInstance->SetScalarParameterValue(TEXT("MapRotationOffsetRad"), FMath::DegreesToRadians(ViewContext.TotalStaticRotation));
 }
 
+void UOBMapWidgetBase::UpdateMapImageViewport(const FOBNavigationMapLayerSpec& CurrentLayer)
+{
+	if (!MapImage)
+	{
+		return;
+	}
+
+	UCanvasPanel* MarkerCanvas = GetMarkerCanvas();
+	if (!MarkerCanvas)
+	{
+		return;
+	}
+
+	const FVector2D CanvasSize = MarkerCanvas->GetCachedGeometry().GetLocalSize();
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	if (!MapViewport.IsValid())
+	{
+		return;
+	}
+
+	if (UCanvasPanelSlot* MapImageSlot = Cast<UCanvasPanelSlot>(MapImage->Slot))
+	{
+		MapImageSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
+		MapImageSlot->SetAlignment(FVector2D::ZeroVector);
+		MapImageSlot->SetPosition(MapViewport.Origin);
+		MapImageSlot->SetSize(MapViewport.Size);
+	}
+	else if (!bWarnedMapImageNonCanvasSlot && VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+	{
+		bWarnedMapImageNonCanvasSlot = true;
+		UE_LOG(LogOBNavigation, Warning,
+		       TEXT("[%s::%hs] - MapImage is not in a CanvasPanelSlot; single-texture fallback may stretch. Put MapImage and MapMarkerCanvas in matching CanvasPanel space for aspect-correct rendering."),
+		       *GetName(), __FUNCTION__);
+	}
+}
+
 void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLayer,
                                       const FOBNavigationMapViewContext& ViewContext)
 {
@@ -409,7 +456,13 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 		return;
 	}
 
-	TileManager->UpdateActiveTiles(ViewContext, CanvasSize, GetNavigationSurface(), GetMinimapMaxLODTileLimit());
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	if (!MapViewport.IsValid())
+	{
+		return;
+	}
+
+	TileManager->UpdateActiveTiles(ViewContext, MapViewport.Size, GetNavigationSurface(), GetMinimapMaxLODTileLimit());
 	const FOBMapTileRuntimeStats TileStats = TileManager->GetRuntimeStats();
 	if (TileStats.State != LastLoggedTileManagerState)
 	{
@@ -460,7 +513,9 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 	const bool bShowTileDebug = VisualConfigAsset && VisualConfigAsset->bShowDebugMessages;
 	const bool bLogTacticalTilePlacement = bShowTileDebug
 		&& GetNavigationSurface() == EOBNavigationSurface::FullMap
-		&& TileStats.ActiveLOD != LastLoggedTacticalTileLOD;
+		&& (TileStats.ActiveLOD != LastLoggedTacticalTileLOD
+			|| !MapViewport.Origin.Equals(LastLoggedTacticalViewportOrigin, 0.5f)
+			|| !MapViewport.Size.Equals(LastLoggedTacticalViewportSize, 0.5f));
 	const FOBNavigationMapViewContext TileViewContext = [&ViewContext]()
 	{
 		FOBNavigationMapViewContext Result = ViewContext;
@@ -517,14 +572,14 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 
 		const FVector2D TileCenterUV = (TileUVMin + TileUVMax) * 0.5f;
 		FOBNavigationCanvasProjection Projection;
-		if (!OBNavigation::MapView::ProjectUVToCanvas(TileCenterUV, CanvasSize, TileViewContext, Projection))
+		if (!OBNavigation::MapView::ProjectUVToCanvas(TileCenterUV, MapViewport, TileViewContext, Projection))
 		{
 			TileImage->SetVisibility(ESlateVisibility::Collapsed);
 			continue;
 		}
 
 		const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-		const FVector2D TileSize(TileUVExtent.X * CanvasSize.X * SafeZoom, TileUVExtent.Y * CanvasSize.Y * SafeZoom);
+		const FVector2D TileSize(TileUVExtent.X * MapViewport.Size.X * SafeZoom, TileUVExtent.Y * MapViewport.Size.Y * SafeZoom);
 		const FVector2D TileTopLeft = Projection.CanvasPosition - TileSize * 0.5f;
 
 		TileImage->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -626,8 +681,10 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 		if (bLogTacticalTilePlacement)
 		{
 			UE_LOG(LogOBNavigation, Log,
-			       TEXT("[%s::%hs] - Tactical active tile. LOD=%d X=%d Y=%d UVMin=%s UVMax=%s TopLeft=%s Size=%s Texture='%s'"),
-			       *GetName(), __FUNCTION__, ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y,
+			       TEXT("[%s::%hs] - Tactical active tile. RawCanvas=%s ViewportOrigin=%s ViewportSize=%s LayerOutput=%dx%d Aspect=%.3f LOD=%d X=%d Y=%d UVMin=%s UVMax=%s TopLeft=%s Size=%s Texture='%s'"),
+			       *GetName(), __FUNCTION__, *CanvasSize.ToString(), *MapViewport.Origin.ToString(),
+			       *MapViewport.Size.ToString(), CurrentLayer.OutputSize.X, CurrentLayer.OutputSize.Y,
+			       MapViewport.AspectRatio, ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y,
 			       *ActiveTile.UVMin.ToString(), *ActiveTile.UVMax.ToString(), *TileTopLeft.ToString(),
 			       *TileSize.ToString(), *ActiveTile.TextureRef.ToSoftObjectPath().ToString());
 		}
@@ -636,6 +693,15 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 	if (bLogTacticalTilePlacement)
 	{
 		LastLoggedTacticalTileLOD = TileStats.ActiveLOD;
+		LastLoggedTacticalViewportOrigin = MapViewport.Origin;
+		LastLoggedTacticalViewportSize = MapViewport.Size;
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1, 0.0f, FColor::Orange,
+				FString::Printf(TEXT("Viewport: %.0fx%.0f in %.0fx%.0f"),
+					MapViewport.Size.X, MapViewport.Size.Y, CanvasSize.X, CanvasSize.Y));
+		}
 	}
 
 	TArray<FString> TilesToRemove;
@@ -737,7 +803,13 @@ void UOBMapWidgetBase::UpdateMapMarkers(const APawn* TrackedPawn, const FOBNavig
 		return;
 	}
 
-	const FVector2D CanvasCenter = CanvasSize * 0.5f;
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	if (!MapViewport.IsValid())
+	{
+		return;
+	}
+
+	const FVector2D CanvasCenter = MapViewport.GetCenter();
 	const TArray<UOBMapMarker*> VisibleMarkers = NavSubsystem->GetVisibleMarkers(GetNavigationSurface());
 	for (UOBMapMarker* Marker : VisibleMarkers)
 	{
@@ -775,7 +847,7 @@ void UOBMapWidgetBase::UpdateMapMarkers(const APawn* TrackedPawn, const FOBNavig
 			}
 
 			FOBNavigationCanvasProjection CanvasProjection;
-			if (!OBNavigation::MapView::ProjectUVToCanvas(MarkerUV, CanvasSize, ViewContext, CanvasProjection))
+			if (!OBNavigation::MapView::ProjectUVToCanvas(MarkerUV, MapViewport, ViewContext, CanvasProjection))
 			{
 				continue;
 			}
@@ -968,7 +1040,10 @@ void UOBMapWidgetBase::ClearTileWidgets()
 
 	LastLoggedTileManagerState = EOBMapTileManagerState::Uninitialized;
 	LastLoggedTacticalTileLOD = INDEX_NONE;
+	LastLoggedTacticalViewportOrigin = FVector2D(-1.0f, -1.0f);
+	LastLoggedTacticalViewportSize = FVector2D(-1.0f, -1.0f);
 	bWarnedMissingTiledMapTileMaterial = false;
+	bWarnedMapImageNonCanvasSlot = false;
 }
 
 UCanvasPanel* UOBMapWidgetBase::EnsureTileLayerCanvas()

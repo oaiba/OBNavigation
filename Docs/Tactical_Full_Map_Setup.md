@@ -84,7 +84,7 @@ LOD của tiled tactical map được chọn bằng world-units-per-screen-pixel
 | `MinimapBackgroundMaterial` | Dùng cho single-texture fallback và legacy map. |
 | `MapAlignment` | Dùng để map texture khớp trục world. |
 | `MapRotationOffset` | Dùng cho static map rotation. |
-| `TiledMapTileMaterial` | Không bắt buộc cho tactical map; tactical map thường là rectangular/full-screen nên direct tile brush là đủ. |
+| `TiledMapTileMaterial` | Không bắt buộc cho tactical map; tactical có thể nằm trong canvas chữ nhật, nhưng map content luôn preserve aspect nên direct tile brush là đủ. |
 
 Tactical map luôn north-up theo policy hiện tại, không dùng dynamic pawn yaw để xoay map.
 
@@ -107,8 +107,9 @@ UOBTacticalMapWidget
 
 Yêu cầu layout:
 
-- `MapImage` và `MapMarkerCanvas` phải phủ cùng vùng.
-- Với full-screen map, cả hai thường anchor full size trong vùng map.
+- `MapImage` và `MapMarkerCanvas` phải phủ cùng vùng và nên cùng nằm trong một hệ tọa độ canvas.
+- Với full-screen map, cả hai có thể anchor full size trong vùng map chữ nhật; OBNavigation sẽ render map content theo aspect của asset ở giữa vùng đó.
+- Nếu muốn map tactical chiếm đúng hình vuông không có khoảng trống hai bên, đặt cả `MapImage` và `MapMarkerCanvas` trong một `SizeBox`/`ScaleBox` vuông ở Blueprint.
 - `MapMarkerCanvas` nên nằm phía trên `MapImage`.
 - Không tự thêm tile canvas trong Blueprint; OBNavigation tự tạo canvas tile runtime bên trong `MapMarkerCanvas`.
 
@@ -183,6 +184,7 @@ Khi active layer có `PanoramicDefinition` với `TileSet`, tactical map dùng t
 Runtime behavior:
 
 - `MapImage` dùng `BaseMapTexture` fallback nếu có.
+- `MapImage`, tiled images, overlays và markers dùng cùng aspect-preserving viewport; capture 8192x8192 sẽ luôn hiển thị thành hình vuông kể cả khi tactical canvas là hình chữ nhật.
 - Tile definition/tile set/tile textures được stream async.
 - Khi active tile images đã sẵn sàng, `MapImage` được ẩn để tiled map hiển thị.
 - Nếu layer không có `TileSet`, tactical map dùng single-texture path.
@@ -295,4 +297,3 @@ TacticalMapWidget->ClearOverlayFilters();
 | Zoom out vẫn load quá nhiều tile chi tiết | Kiểm tra Panoramic pyramid và `TacticalTileBudget`; tactical LOD dựa trên world-units-per-screen-pixel. |
 | Marker không hiện trên full map | Kiểm tra marker config có bật `bShowOnFullMap` và filter marker layer. |
 | Overlay không hiện | Kiểm tra overlay layer visibility, category/tag filter và active map layer. |
-

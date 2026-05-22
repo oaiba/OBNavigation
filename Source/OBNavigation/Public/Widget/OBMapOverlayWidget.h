@@ -58,7 +58,7 @@ protected:
 	                          int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 private:
-	bool ProjectWorldToCanvas(const FVector& WorldLocation, const FVector2D& CanvasSize,
+	bool ProjectWorldToCanvas(const FVector& WorldLocation, const FOBNavigationMapViewport& MapViewport,
 	                          FVector2D& OutCanvasPosition) const;
 
 	UPROPERTY(Transient)

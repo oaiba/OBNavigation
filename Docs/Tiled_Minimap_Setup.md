@@ -169,6 +169,7 @@ TacticalMapWidget->InitializeTacticalMapAndStartTracking(MinimapConfigAsset, Tac
 
 - `MapImage` và `MapMarkerCanvas` nên có cùng size và anchors.
 - `MapMarkerCanvas` phải đủ lớn để phủ toàn bộ vùng bản đồ nhìn thấy.
+- Với tactical map, vùng này có thể là hình chữ nhật; OBNavigation sẽ fit map content theo aspect của Panoramic output hoặc world bounds, ví dụ output 8192x8192 sẽ render thành viewport vuông ở giữa canvas.
 - Không tự thêm tile canvas trong Blueprint. OBNavigation tự tạo runtime tile canvas có clipping bên dưới overlays và markers.
 
 ---
@@ -286,4 +287,4 @@ Các trường hữu ích:
 | Minimap tròn nhìn thành vuông | Gán `TiledMapTileMaterial` và kiểm tra material params. |
 | Sai LOD | Kiểm tra `MinimapMaxLODTileLimit`, kích thước widget, zoom và Panoramic pyramid settings. |
 | Trục Y của tile bị lật | Kiểm tra `UVMin`/`UVMax` của Panoramic và hướng capture bounds. |
-| Marker bị lệch | Đảm bảo `MapImage` và `MapMarkerCanvas` có cùng size/anchors. |
+| Marker bị lệch | Đảm bảo `MapImage` và `MapMarkerCanvas` cùng hệ tọa độ canvas; kiểm tra debug `Map Viewport` để xác nhận viewport aspect-preserving đang đúng. |

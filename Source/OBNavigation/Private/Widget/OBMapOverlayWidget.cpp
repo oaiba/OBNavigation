@@ -42,6 +42,12 @@ int32 UOBMapOverlayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 		return MaxLayer;
 	}
 
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, LayerSpec);
+	if (!MapViewport.IsValid())
+	{
+		return MaxLayer;
+	}
+
 	int32 DrawLayer = MaxLayer + 1;
 	for (const FOBNavigationOverlayElement& Element : OverlayElements)
 	{
@@ -57,7 +63,7 @@ int32 UOBMapOverlayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 		if (Element.Type == EOBNavigationOverlayElementType::Marker)
 		{
 			FVector2D MarkerPosition;
-			if (!ProjectWorldToCanvas(Element.WorldPoints[0], CanvasSize, MarkerPosition))
+			if (!ProjectWorldToCanvas(Element.WorldPoints[0], MapViewport, MarkerPosition))
 			{
 				continue;
 			}
@@ -106,7 +112,7 @@ int32 UOBMapOverlayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 		for (const FVector& WorldPoint : Element.WorldPoints)
 		{
 			FVector2D CanvasPoint;
-			if (ProjectWorldToCanvas(WorldPoint, CanvasSize, CanvasPoint))
+			if (ProjectWorldToCanvas(WorldPoint, MapViewport, CanvasPoint))
 			{
 				CanvasPoints.Add(CanvasPoint);
 			}
@@ -137,7 +143,8 @@ int32 UOBMapOverlayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 	return DrawLayer;
 }
 
-bool UOBMapOverlayWidget::ProjectWorldToCanvas(const FVector& WorldLocation, const FVector2D& CanvasSize,
+bool UOBMapOverlayWidget::ProjectWorldToCanvas(const FVector& WorldLocation,
+                                               const FOBNavigationMapViewport& MapViewport,
                                                FVector2D& OutCanvasPosition) const
 {
 	FVector2D PointUV;
@@ -148,7 +155,7 @@ bool UOBMapOverlayWidget::ProjectWorldToCanvas(const FVector& WorldLocation, con
 	}
 
 	FOBNavigationCanvasProjection Projection;
-	if (!OBNavigation::MapView::ProjectUVToCanvas(PointUV, CanvasSize, ViewContext, Projection))
+	if (!OBNavigation::MapView::ProjectUVToCanvas(PointUV, MapViewport, ViewContext, Projection))
 	{
 		return false;
 	}

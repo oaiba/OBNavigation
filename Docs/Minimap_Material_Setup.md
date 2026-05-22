@@ -157,7 +157,7 @@ Nếu muốn hiển thị vị trí UV của người chơi trên map texture:
 
 ## 7. Tùy Chọn: Material Cho Tile Của Tiled Minimap
 
-Các layer Panoramic dạng tiled có thể render từng tile texture riêng thay vì một atlas texture duy nhất. Minimap vuông và tactical map có thể dùng direct tile brush. Minimap tròn nên gán `TiledMapTileMaterial` trong `UOBMinimapConfigAsset` để từng tile áp dụng cùng mask tròn như single-texture path.
+Các layer Panoramic dạng tiled có thể render từng tile texture riêng thay vì một atlas texture duy nhất. Minimap vuông và tactical map có thể dùng direct tile brush; tactical map sẽ preserve aspect bằng viewport runtime, không phụ thuộc vào canvas ngoài là vuông hay chữ nhật. Minimap tròn nên gán `TiledMapTileMaterial` trong `UOBMinimapConfigAsset` để từng tile áp dụng cùng mask tròn như single-texture path.
 
 Tạo một UI material có các tham số sau:
 
