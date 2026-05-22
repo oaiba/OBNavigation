@@ -53,20 +53,27 @@ public:
 	void ClearOverlayContext();
 
 protected:
+	/** Paints overlay primitives using the current layer and view context. */
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
 	                          const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
 	                          int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 private:
+	/** Projects a world-space overlay point into widget-local canvas space. */
 	bool ProjectWorldToCanvas(const FVector& WorldLocation, const FOBNavigationMapViewport& MapViewport,
 	                          FVector2D& OutCanvasPosition) const;
 
+	/** Active layer metadata used to project overlay world points. */
 	UPROPERTY(Transient)
 	FOBNavigationMapLayerSpec LayerSpec;
 
+	/** Overlay elements selected for this widget surface and filters. */
 	UPROPERTY(Transient)
 	TArray<FOBNavigationOverlayElement> OverlayElements;
 
+	/** Current map view state shared with markers and tiles. */
 	FOBNavigationMapViewContext ViewContext;
+
+	/** True when LayerSpec, OverlayElements, and ViewContext are valid for painting. */
 	bool bHasOverlayContext = false;
 };

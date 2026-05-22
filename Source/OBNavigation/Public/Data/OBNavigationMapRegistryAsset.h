@@ -10,8 +10,7 @@
 class UOBMarkerConfigAsset;
 
 /**
- * @struct FOBNavigationMarkerConfigEntry
- * @brief Maps a single Gameplay Tag to a marker configuration asset.
+ * Maps a single Gameplay Tag to a marker configuration asset.
  *
  * The navigation subsystem uses this mapping at initialization to build
  * a fast lookup table (FGameplayTag → UOBMarkerConfigAsset*). When a
@@ -52,8 +51,7 @@ struct OBNAVIGATION_API FOBNavigationMarkerConfigEntry
 };
 
 /**
- * @class UOBNavigationMapRegistryAsset
- * @brief Central data asset that acts as the project's marker configuration registry.
+ * Central data asset that acts as the project's marker configuration registry.
  *
  * Designers create one (or more) instances of this asset and reference it from
  * UOBNavigationDeveloperSettings::DefaultMapRegistry. The navigation subsystem

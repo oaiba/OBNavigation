@@ -25,9 +25,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNavigationMapLayerSpecChanged, FO
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnMarkersUpdated);
 
 /**
- * @class UOBNavigationSubsystem
- * @brief Central subsystem that manages all navigation data — map layers,
- *        markers, overlays, and compass state — for the local game instance.
+ * Central subsystem that manages all navigation data: map layers, markers,
+ * overlays, and compass state for the local game instance.
  *
  * Lifetime: Created when the UGameInstance initializes and destroyed when the
  * game instance shuts down. There is exactly one instance per local process.

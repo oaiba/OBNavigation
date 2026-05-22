@@ -11,9 +11,8 @@ class UOBMarkerConfigAsset;
 class UOBNavigationSubsystem;
 
 /**
- * @class UOBNavigationSourceComponent
- * @brief Actor component that automatically registers its owning actor
- *        as a navigation marker in the OBNavigationSubsystem.
+ * Actor component that automatically registers its owning actor as a navigation
+ * marker in UOBNavigationSubsystem.
  *
  * Attach this component to any actor that should appear on the minimap,
  * full map, or compass (e.g., players, enemies, objectives, vehicles).

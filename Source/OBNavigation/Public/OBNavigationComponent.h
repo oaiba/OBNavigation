@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright OBExtraction. All Rights Reserved.
 
 #pragma once
 
@@ -10,9 +10,8 @@ class UOBMarkerConfigAsset;
 class UOBNavigationSubsystem;
 
 /**
- * @class UOBNavigationComponent
- * @brief Component attached to any APawn (including Mover-based pawns) to handle local player
- * navigation aspects and register/update the pawn-specific marker with the global subsystem.
+ * Component attached to any APawn, including Mover-based pawns, to handle local
+ * player navigation and register/update the pawn marker with the global subsystem.
  * Deliberately uses APawn instead of ACharacter so that non-ACharacter Mover pawns are supported.
  */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), Blueprintable, BlueprintType)
@@ -21,36 +20,38 @@ class OBNAVIGATION_API UOBNavigationComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:	
+	/** Sets default component ticking behavior. */
 	UOBNavigationComponent();
 
+	/** Resolves the navigation subsystem and registers this pawn marker when relevant. */
 	virtual void BeginPlay() override;
+
+	/** Unregisters this pawn marker before the component leaves play. */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// The configuration asset for this character's marker on the map/compass.
-	// E.g., a "Player Icon" or "Team Member" icon.
+	/** Marker config used for this pawn's map and compass marker. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation")
 	TObjectPtr<UOBMarkerConfigAsset> CharacterMapMarkerConfig;
 
-	// The layer name for this character's marker (e.g., "PartyMembers")
+	/** Logical layer name assigned to this pawn marker. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation")
 	FName CharacterMapMarkerLayerName = TEXT("Players");
 
 protected:
-	// Registers this character's marker with the subsystem.
+	/** Registers this character's marker with the subsystem. */
 	void RegisterCharacterMarker();
 
-	// Unregisters this character's marker from the subsystem.
+	/** Unregisters this character's marker from the subsystem. */
 	void UnregisterCharacterMarker();
 
 private:
+	/** Cached local navigation subsystem reference. */
 	UPROPERTY(Transient)
 	TObjectPtr<UOBNavigationSubsystem> NavSubsystem;
 
-	// The ID of the marker registered for this character (if any)
+	/** ID of the marker registered for this character, if any. */
 	FGuid CharacterMarkerID;
 
-	// Only register character marker for relevant clients.
-	// For multiplayer, Server and Autonomous Proxy will handle this.
-	// Dedicated Server doesn't need to display itself on maps.
+	/** Returns true when this net role should register a local navigation marker. */
 	bool ShouldRegisterCharacterMarker() const;
 };

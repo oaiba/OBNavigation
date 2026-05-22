@@ -9,8 +9,7 @@
 class UOBNavigationMapRegistryAsset;
 
 /**
- * @class UOBNavigationDeveloperSettings
- * @brief Project-wide configuration for the OBNavigation plugin.
+ * Project-wide configuration for the OBNavigation plugin.
  *
  * Extends UDeveloperSettings so that entries appear automatically in
  * Project Settings → Game → OB Navigation. Values are serialized into

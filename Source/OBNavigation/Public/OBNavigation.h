@@ -35,11 +35,14 @@ namespace OBNavigation
 	OBNAVIGATION_API FString DescribeActorNavigationComponentSnapshot(const AActor* Actor);
 }
 
+/** Module entry point for the OBNavigation runtime plugin. */
 class FOBNavigationModule : public IModuleInterface
 {
 public:
 
-	/** IModuleInterface implementation */
+	/** Registers module-level systems when the plugin starts. */
 	virtual void StartupModule() override;
+
+	/** Releases module-level systems when the plugin shuts down. */
 	virtual void ShutdownModule() override;
 };

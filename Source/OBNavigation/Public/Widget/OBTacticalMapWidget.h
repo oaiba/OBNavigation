@@ -390,7 +390,10 @@ protected:
 	                                  const FOBNavigationMapLayerSpec& CurrentLayer, const APawn* TrackedPawn) override;
 
 private:
+	/** Combo-box item that clears the tactical layer override. */
 	static constexpr const TCHAR* AutoLayerOption = TEXT("Auto");
+
+	/** Combo-box item that disables marker-layer filtering. */
 	static constexpr const TCHAR* AllMarkerLayersOption = TEXT("All");
 
 	/** Applies continuous pan input scaled by PanSpeed and DeltaTime. */
@@ -429,51 +432,67 @@ private:
 	/** Converts current zoom into a normalized slider value. */
 	float GetSliderValueFromZoom() const;
 
+	/** Handles the optional zoom-in button click. */
 	UFUNCTION()
 	void HandleZoomInClicked();
 
+	/** Handles the optional zoom-out button click. */
 	UFUNCTION()
 	void HandleZoomOutClicked();
 
+	/** Converts optional zoom slider changes into tactical map zoom. */
 	UFUNCTION()
 	void HandleZoomSliderChanged(float SliderValue);
 
+	/** Handles the optional one-step pan-up button click. */
 	UFUNCTION()
 	void HandlePanUpClicked();
 
+	/** Handles the optional one-step pan-down button click. */
 	UFUNCTION()
 	void HandlePanDownClicked();
 
+	/** Handles the optional one-step pan-left button click. */
 	UFUNCTION()
 	void HandlePanLeftClicked();
 
+	/** Handles the optional one-step pan-right button click. */
 	UFUNCTION()
 	void HandlePanRightClicked();
 
+	/** Handles the optional recenter button click. */
 	UFUNCTION()
 	void HandleRecenterClicked();
 
+	/** Handles optional follow checkbox state changes. */
 	UFUNCTION()
 	void HandleFollowCheckChanged(bool bIsChecked);
 
+	/** Handles optional tactical layer combo-box selection changes. */
 	UFUNCTION()
 	void HandleLayerSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
+	/** Handles optional clear-layer-override button click. */
 	UFUNCTION()
 	void HandleClearLayerOverrideClicked();
 
+	/** Handles optional marker-layer combo-box selection changes. */
 	UFUNCTION()
 	void HandleMarkerLayerSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
 
+	/** Handles optional marker-layer enabled checkbox changes. */
 	UFUNCTION()
 	void HandleMarkerLayerEnabledChanged(bool bIsChecked);
 
+	/** Applies optional overlay category text-box commits. */
 	UFUNCTION()
 	void HandleOverlayCategoryCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
+	/** Applies optional overlay tag text-box commits. */
 	UFUNCTION()
 	void HandleOverlayTagCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 
+	/** Handles optional clear-overlay-filters button click. */
 	UFUNCTION()
 	void HandleClearOverlayFiltersClicked();
 
@@ -540,12 +559,15 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> PanUpButton;
 
+	/** Optional button that pans the tactical view down by one step. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> PanDownButton;
 
+	/** Optional button that pans the tactical view left by one step. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> PanLeftButton;
 
+	/** Optional button that pans the tactical view right by one step. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> PanRightButton;
 
@@ -557,9 +579,11 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> RecenterButton;
 
+	/** Optional checkbox that toggles follow-tracked-player mode. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UCheckBox> FollowPlayerCheckBox;
 
+	/** Optional text label for current follow mode. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> FollowStateText;
 
@@ -567,9 +591,11 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UComboBoxString> LayerComboBox;
 
+	/** Optional button that clears tactical layer override. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> ClearLayerOverrideButton;
 
+	/** Optional text label for the active tactical layer. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ActiveLayerText;
 
@@ -577,9 +603,11 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UComboBoxString> MarkerLayerComboBox;
 
+	/** Optional checkbox that enables or disables the selected marker layer. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UCheckBox> MarkerLayerEnabledCheckBox;
 
+	/** Optional text label summarizing active marker filters. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ActiveMarkerFilterText;
 
@@ -587,12 +615,15 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UEditableTextBox> OverlayCategoryTextBox;
 
+	/** Optional text box for overlay tag filter input. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UEditableTextBox> OverlayTagTextBox;
 
+	/** Optional button that clears overlay filters. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UButton> ClearOverlayFiltersButton;
 
+	/** Optional text label summarizing active overlay filters. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ActiveOverlayFilterText;
 
@@ -600,9 +631,11 @@ private:
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> ViewCenterText;
 
+	/** Optional text label showing current continuous pan input. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> PanInputText;
 
+	/** Optional text label showing current tile LOD and tile counts. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> TileLODText;
 };

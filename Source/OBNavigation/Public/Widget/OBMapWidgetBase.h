@@ -89,6 +89,7 @@ class OBNAVIGATION_API UOBMapWidgetBase : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	/** Returns current tile streaming stats for Blueprint debug UI. */
 	UFUNCTION(BlueprintPure, Category = "OBNavigation|Tiles")
 	FOBMapTileRuntimeStats GetTileRuntimeStats() const;
 
@@ -318,9 +319,16 @@ protected:
 	void UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLayer,
 	                    const FOBNavigationMapViewContext& ViewContext);
 
+	/** Returns the tile-cache budget for this widget surface. */
 	virtual int32 GetTileBudget() const;
+
+	/** Returns minimap-specific full-detail tile limit before LOD downgrade. */
 	virtual int32 GetMinimapMaxLODTileLimit() const;
+
+	/** Returns the optional tile material used for shape masking. */
 	virtual UMaterialInterface* GetTiledMapTileMaterial() const;
+
+	/** Returns true when tiled images should use the minimap shape-mask material. */
 	virtual bool ShouldMaskTiledMapTiles() const;
 
 	/**
