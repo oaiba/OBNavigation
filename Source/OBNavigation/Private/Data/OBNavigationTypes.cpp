@@ -30,6 +30,19 @@ bool IsInsideOrOnBoundsXY(const FBox& Bounds, const FVector& WorldLocation)
 		&& WorldLocation.Y <= Bounds.Max.Y;
 }
 
+FVector2D ProjectWorldToPanoramicMapUV(const FBox& WorldBounds, const float MapRotationDegrees,
+                                       const FVector& WorldLocation)
+{
+	const FVector BoundsMin = WorldBounds.Min;
+	const FVector BoundsSize = WorldBounds.GetSize();
+
+	const FVector2D RawUV(
+		(WorldLocation.X - BoundsMin.X) / BoundsSize.X,
+		1.0f - ((WorldLocation.Y - BoundsMin.Y) / BoundsSize.Y));
+	const FVector2D RotatedUV = ApplyMapRotation(RawUV, MapRotationDegrees);
+	return FVector2D(RotatedUV.X, 1.0f - RotatedUV.Y);
+}
+
 EOBNavigationOverlayElementType ConvertPanoramicOverlayElementType(const EMinimapOverlayElementType SourceType)
 {
 	switch (SourceType)
@@ -169,11 +182,18 @@ bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldL
 	const FVector BoundsMin = WorldBounds.Min;
 	const FVector BoundsSize = WorldBounds.GetSize();
 
-	OutMapUV = FVector2D(
-		(WorldLocation.X - BoundsMin.X) / BoundsSize.X,
-		1.0f - ((WorldLocation.Y - BoundsMin.Y) / BoundsSize.Y));
+	if (HasPanoramicDefinition())
+	{
+		OutMapUV = ProjectWorldToPanoramicMapUV(WorldBounds, MapRotationDegrees, WorldLocation);
+	}
+	else
+	{
+		OutMapUV = FVector2D(
+			(WorldLocation.X - BoundsMin.X) / BoundsSize.X,
+			1.0f - ((WorldLocation.Y - BoundsMin.Y) / BoundsSize.Y));
 
-	OutMapUV = ApplyMapRotation(OutMapUV, MapRotationDegrees);
+		OutMapUV = ApplyMapRotation(OutMapUV, MapRotationDegrees);
+	}
 
 	if (bClampQueriesToBounds)
 	{
