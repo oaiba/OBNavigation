@@ -3,18 +3,22 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/CanvasPanel.h"
+#include "Data/OBMapTileManager.h"
 #include "Data/OBMinimapConfigAsset.h"
 #include "Data/OBNavigationTypes.h"
 #include "Widget/OBMapMarkerWidget.h"
 #include "OBMapWidgetBase.generated.h"
 
 class APawn;
+class UMinimapDefinitionDataAsset;
 class UImage;
+class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UOBMapMarker;
 class UOBMapOverlayWidget;
 class UOBMinimapConfigAsset;
 class UOBNavigationSubsystem;
+class UTextBlock;
 class UTexture2D;
 
 /**
@@ -84,6 +88,10 @@ UCLASS(Abstract)
 class OBNAVIGATION_API UOBMapWidgetBase : public UUserWidget
 {
 	GENERATED_BODY()
+
+public:
+	UFUNCTION(BlueprintPure, Category = "OBNavigation|Tiles")
+	FOBMapTileRuntimeStats GetTileRuntimeStats() const;
 
 protected:
 	/**
@@ -296,6 +304,20 @@ protected:
 	void UpdateMapMaterial(const FOBNavigationMapViewContext& ViewContext);
 
 	/**
+	 * Updates tiled map images when the active layer is backed by a Panoramic tile set.
+	 *
+	 * @param CurrentLayer The active tiled layer.
+	 * @param ViewContext The resolved view state for this frame.
+	 */
+	void UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLayer,
+	                    const FOBNavigationMapViewContext& ViewContext);
+
+	virtual int32 GetTileBudget() const;
+	virtual int32 GetMinimapMaxLODTileLimit() const;
+	virtual UMaterialInterface* GetTiledMapTileMaterial() const;
+	virtual bool ShouldMaskTiledMapTiles() const;
+
+	/**
 	 * Projects visible markers into canvas space and updates marker widget instances.
 	 * 
 	 * @param TrackedPawn The tracked player pawn.
@@ -320,6 +342,12 @@ protected:
 
 	/** Removes all marker widget children and clears the active marker pool. */
 	void ClearMarkerWidgets();
+
+	/** Removes all tile image widgets and releases streamed tile state. */
+	void ClearTileWidgets();
+
+	/** Ensures a clipped canvas exists below overlays and markers for tiled rendering. */
+	UCanvasPanel* EnsureTileLayerCanvas();
 
 	/**
 	 * Applies the layer texture when the layer meaningfully changes.
@@ -356,6 +384,26 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UOBMapOverlayWidget> OverlayWidget = nullptr;
 
+	/** Runtime tile streaming and active-tile query helper for Panoramic tile-set layers. */
+	UPROPERTY(Transient)
+	TObjectPtr<UOBMapTileManager> TileManager = nullptr;
+
+	/** Active tile image widgets keyed by LOD/X/Y. */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UImage>> ActiveTileImages;
+
+	/** Per-tile dynamic material instances used when tiled masking is configured. */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> ActiveTileMaterialInstances;
+
+	/** Debug coordinate labels keyed by LOD/X/Y. Created only when debug messages are enabled. */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UTextBlock>> ActiveTileCoordinateLabels;
+
+	/** Clipped canvas that contains tiled map images below overlays and markers. */
+	UPROPERTY(Transient)
+	TObjectPtr<UCanvasPanel> TileLayerCanvas = nullptr;
+
 	/** Visual configuration shared by minimap and tactical map widgets. */
 	UPROPERTY(Transient)
 	TObjectPtr<UOBMinimapConfigAsset> VisualConfigAsset;
@@ -375,4 +423,20 @@ protected:
 	/** Last texture applied to the map material. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> AppliedMapTexture = nullptr;
+
+	/** Last Panoramic definition applied to either render path. */
+	UPROPERTY(Transient)
+	TSoftObjectPtr<UMinimapDefinitionDataAsset> AppliedPanoramicDefinition;
+
+	/** True when the current layer is rendered through tile widgets. */
+	bool bAppliedTiledLayer = false;
+
+	/** Prevents repeated circle-mask material warnings. */
+	bool bWarnedMissingTiledMapTileMaterial = false;
+
+	/** Last tile manager state logged for this layer. */
+	EOBMapTileManagerState LastLoggedTileManagerState = EOBMapTileManagerState::Uninitialized;
+
+	/** Last active LOD whose tactical tile placements were logged. */
+	int32 LastLoggedTacticalTileLOD = INDEX_NONE;
 };

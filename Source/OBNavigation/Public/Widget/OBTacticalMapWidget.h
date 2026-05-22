@@ -300,6 +300,9 @@ protected:
 	 */
 	virtual float GetMaximumZoom() const override;
 
+	/** Returns the tactical tile-cache budget. */
+	virtual int32 GetTileBudget() const override;
+
 	/**
 	 * Always returns false because tactical map v1 is north-up.
 	 * 
@@ -407,6 +410,9 @@ private:
 
 	/** Refreshes optional control values and status labels from current state. */
 	void RefreshTacticalControlState();
+
+	/** Refreshes optional tiled runtime status labels from current tile manager stats. */
+	void RefreshTileDebugState();
 
 	/** Populates the optional map-layer combo box from navigation layers. */
 	void PopulateLayerComboBox();
@@ -596,4 +602,7 @@ private:
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
 	TObjectPtr<UTextBlock> PanInputText;
+
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidgetOptional, AllowPrivateAccess = "true"))
+	TObjectPtr<UTextBlock> TileLODText;
 };

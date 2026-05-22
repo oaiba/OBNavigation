@@ -28,6 +28,7 @@ public class OBNavigation : ModuleRules
 					"Core",
 					"DeveloperSettings",
 					"GameplayTags",
+					"PanoramicMinimapGeneratorRuntime",
 					"UMG",
 					// ... add other public dependencies that you statically link with here ...
 				}

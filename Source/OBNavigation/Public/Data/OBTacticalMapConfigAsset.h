@@ -68,4 +68,8 @@ public:
 	/** Enables project UI to display tactical debug coordinates when desired. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Debug")
 	bool bShowDebugCoordinates = false;
+
+	/** Maximum cached tile textures retained by the tactical map tiled render path. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OBNavigation|TacticalMap|Tiles", meta = (ClampMin = "1"))
+	int32 TacticalTileBudget = 64;
 };

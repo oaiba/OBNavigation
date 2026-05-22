@@ -70,6 +70,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Assets")
 	TObjectPtr<UMaterialInterface> MinimapBackgroundMaterial;
 
+	// Optional UI material used by tiled minimap images when shape masking is needed.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Assets")
+	TObjectPtr<UMaterialInterface> TiledMapTileMaterial;
+
 	// The texture for the player's icon in the center of the minimap.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Assets")
 	TObjectPtr<UOBMarkerConfigAsset> PlayerMarkerConfig;
@@ -103,6 +107,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings")
 	EMinimapShape MinimapShape = EMinimapShape::Circle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings|Tiles", meta = (ClampMin = "1"))
+	int32 TiledMapTileBudget = 25;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Minimap Settings|Tiles", meta = (ClampMin = "0"))
+	int32 MinimapMaxLODTileLimit = 12;
 
 	// --- COMPASS SETTINGS ---
 	

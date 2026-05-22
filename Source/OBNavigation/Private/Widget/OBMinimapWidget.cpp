@@ -74,6 +74,11 @@ bool UOBMinimapWidget::ShouldRotateMap() const
 	return ConfigAsset && ConfigAsset->bShouldRotateMap;
 }
 
+bool UOBMinimapWidget::ShouldMaskTiledMapTiles() const
+{
+	return CurrentMinimapShape == EMinimapShape::Circle;
+}
+
 bool UOBMinimapWidget::ShouldCenterPlayerMarker() const
 {
 	return true;

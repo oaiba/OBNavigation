@@ -22,6 +22,10 @@
 	],
 	"Plugins": [
 		{
+			"Name": "OBPanoramicMinimapGenerator",
+			"Enabled": true
+		},
+		{
 			"Name": "Mover",
 			"Enabled": true
 		}

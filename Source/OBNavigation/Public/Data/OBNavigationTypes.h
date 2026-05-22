@@ -5,6 +5,7 @@
 #include "OBNavigationTypes.generated.h"
 
 class AActor;
+class UMinimapDefinitionDataAsset;
 class UOBMarkerConfigAsset;
 class UTexture2D;
 
@@ -153,6 +154,9 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 	TObjectPtr<UTexture2D> MapTexture = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	TSoftObjectPtr<UMinimapDefinitionDataAsset> PanoramicDefinition;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
 	FBox WorldBounds = FBox(ForceInit);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
@@ -171,6 +175,11 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 	TArray<FOBNavigationOverlayLayer> OverlayLayers;
 
 	bool HasValidWorldBounds() const;
+	bool HasPanoramicDefinition() const;
+	bool IsTiledLayer() const;
+	bool UsesSingleTextureLayer() const;
+	bool PopulateFromPanoramicDefinition(const UMinimapDefinitionDataAsset* MinimapDefinition, FName InLayerName,
+	                                     int32 InPriority, bool bForceClampQueriesToBounds);
 	bool ContainsWorldLocationXY(const FVector& WorldLocation) const;
 	bool CanProjectWorldLocation(const FVector& WorldLocation) const;
 	bool ProjectWorldToMapUVChecked(const FVector& WorldLocation, FVector2D& OutMapUV,

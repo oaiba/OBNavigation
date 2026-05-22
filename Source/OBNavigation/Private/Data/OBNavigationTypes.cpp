@@ -1,5 +1,7 @@
 #include "Data/OBNavigationTypes.h"
 
+#include "MinimapDefinitionDataAsset.h"
+
 namespace
 {
 FVector2D ApplyMapRotation(const FVector2D& InUV, const float RotationDegrees)
@@ -27,6 +29,52 @@ bool IsInsideOrOnBoundsXY(const FBox& Bounds, const FVector& WorldLocation)
 		&& WorldLocation.Y >= Bounds.Min.Y
 		&& WorldLocation.Y <= Bounds.Max.Y;
 }
+
+EOBNavigationOverlayElementType ConvertPanoramicOverlayElementType(const EMinimapOverlayElementType SourceType)
+{
+	switch (SourceType)
+	{
+	case EMinimapOverlayElementType::Zone:
+		return EOBNavigationOverlayElementType::Zone;
+	case EMinimapOverlayElementType::Path:
+		return EOBNavigationOverlayElementType::Path;
+	case EMinimapOverlayElementType::Freehand:
+		return EOBNavigationOverlayElementType::Freehand;
+	case EMinimapOverlayElementType::Marker:
+	default:
+		return EOBNavigationOverlayElementType::Marker;
+	}
+}
+
+FOBNavigationOverlayElement ConvertPanoramicOverlayElement(const FMinimapOverlayElement& SourceElement)
+{
+	FOBNavigationOverlayElement Result;
+	Result.Type = ConvertPanoramicOverlayElementType(SourceElement.Type);
+	Result.Id = SourceElement.Id;
+	Result.Label = SourceElement.Label;
+	Result.Category = SourceElement.Category;
+	Result.FilterTags = SourceElement.FilterTags;
+	Result.WorldPoints = SourceElement.WorldPoints;
+	Result.Style.Color = SourceElement.Style.Color;
+	Result.Style.Opacity = SourceElement.Style.Opacity;
+	Result.Style.LineWidth = SourceElement.Style.LineWidth;
+	Result.Style.Icon = SourceElement.Style.Icon;
+	Result.bVisibleByDefault = SourceElement.bVisibleByDefault;
+	return Result;
+}
+
+FOBNavigationOverlayLayer ConvertPanoramicOverlayLayer(const FMinimapOverlayLayer& SourceLayer)
+{
+	FOBNavigationOverlayLayer Result;
+	Result.LayerName = SourceLayer.LayerName;
+	Result.bVisibleByDefault = SourceLayer.bVisibleByDefault;
+	Result.Elements.Reserve(SourceLayer.Elements.Num());
+	for (const FMinimapOverlayElement& SourceElement : SourceLayer.Elements)
+	{
+		Result.Elements.Add(ConvertPanoramicOverlayElement(SourceElement));
+	}
+	return Result;
+}
 }
 
 bool FOBNavigationMapLayerSpec::HasValidWorldBounds() const
@@ -35,6 +83,61 @@ bool FOBNavigationMapLayerSpec::HasValidWorldBounds() const
 	return WorldBounds.IsValid
 		&& !FMath::IsNearlyZero(WorldSize.X)
 		&& !FMath::IsNearlyZero(WorldSize.Y);
+}
+
+bool FOBNavigationMapLayerSpec::HasPanoramicDefinition() const
+{
+	return !PanoramicDefinition.IsNull();
+}
+
+bool FOBNavigationMapLayerSpec::IsTiledLayer() const
+{
+	if (const UMinimapDefinitionDataAsset* Definition = PanoramicDefinition.Get())
+	{
+		return Definition->IsTiledDefinition();
+	}
+
+	return !PanoramicDefinition.IsNull() && MapTexture == nullptr;
+}
+
+bool FOBNavigationMapLayerSpec::UsesSingleTextureLayer() const
+{
+	return MapTexture != nullptr && !IsTiledLayer();
+}
+
+bool FOBNavigationMapLayerSpec::PopulateFromPanoramicDefinition(const UMinimapDefinitionDataAsset* MinimapDefinition,
+                                                                const FName InLayerName, const int32 InPriority,
+                                                                const bool bForceClampQueriesToBounds)
+{
+	*this = FOBNavigationMapLayerSpec();
+	if (!MinimapDefinition || !MinimapDefinition->WorldBounds.IsValid)
+	{
+		return false;
+	}
+
+	const FVector WorldSize = MinimapDefinition->WorldBounds.GetSize();
+	if (FMath::IsNearlyZero(WorldSize.X) || FMath::IsNearlyZero(WorldSize.Y)
+		|| MinimapDefinition->OutputSize.X <= 0 || MinimapDefinition->OutputSize.Y <= 0)
+	{
+		return false;
+	}
+
+	LayerName = InLayerName.IsNone() ? MinimapDefinition->GetFName() : InLayerName;
+	PanoramicDefinition = TSoftObjectPtr<UMinimapDefinitionDataAsset>(const_cast<UMinimapDefinitionDataAsset*>(MinimapDefinition));
+	MapTexture = MinimapDefinition->BaseMapTexture.IsNull() ? nullptr : MinimapDefinition->BaseMapTexture.LoadSynchronous();
+	WorldBounds = MinimapDefinition->WorldBounds;
+	OutputSize = MinimapDefinition->OutputSize;
+	Priority = InPriority;
+	MapRotationDegrees = MinimapDefinition->MapRotationDegrees;
+	bClampQueriesToBounds = bForceClampQueriesToBounds || MinimapDefinition->bClampQueriesToBounds;
+
+	OverlayLayers.Reserve(MinimapDefinition->OverlayLayers.Num());
+	for (const FMinimapOverlayLayer& OverlayLayer : MinimapDefinition->OverlayLayers)
+	{
+		OverlayLayers.Add(ConvertPanoramicOverlayLayer(OverlayLayer));
+	}
+
+	return MapTexture != nullptr || MinimapDefinition->IsTiledDefinition() || !MinimapDefinition->TileSet.IsNull();
 }
 
 bool FOBNavigationMapLayerSpec::ContainsWorldLocationXY(const FVector& WorldLocation) const

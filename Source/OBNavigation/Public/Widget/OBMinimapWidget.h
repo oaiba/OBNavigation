@@ -112,6 +112,9 @@ protected:
 	 */
 	virtual bool ShouldRotateMap() const override;
 
+	/** Returns true when tiled map images should use the minimap shape mask. */
+	virtual bool ShouldMaskTiledMapTiles() const override;
+
 	/**
 	 * Returns true so the player's own marker stays pinned to the canvas center.
 	 * 

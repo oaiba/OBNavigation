@@ -15,6 +15,28 @@
 #include "OBNavigation.h"
 #include "OBNavigationSubsystem.h"
 
+namespace
+{
+FString GetTileManagerStateLabel(const EOBMapTileManagerState State)
+{
+	switch (State)
+	{
+	case EOBMapTileManagerState::Uninitialized:
+		return TEXT("Uninitialized");
+	case EOBMapTileManagerState::LoadingDefinition:
+		return TEXT("Loading Definition");
+	case EOBMapTileManagerState::LoadingTileSet:
+		return TEXT("Loading TileSet");
+	case EOBMapTileManagerState::Ready:
+		return TEXT("Ready");
+	case EOBMapTileManagerState::Failed:
+		return TEXT("Failed");
+	default:
+		return TEXT("Unknown");
+	}
+}
+}
+
 void UOBTacticalMapWidget::InitializeTacticalMapAndStartTracking(UOBMinimapConfigAsset* InMinimapConfigAsset,
                                                                  UOBTacticalMapConfigAsset* InTacticalConfigAsset)
 {
@@ -320,6 +342,11 @@ float UOBTacticalMapWidget::GetMaximumZoom() const
 	return TacticalConfigAsset ? TacticalConfigAsset->MaxZoom : Super::GetMaximumZoom();
 }
 
+int32 UOBTacticalMapWidget::GetTileBudget() const
+{
+	return TacticalConfigAsset ? FMath::Max(1, TacticalConfigAsset->TacticalTileBudget) : Super::GetTileBudget();
+}
+
 bool UOBTacticalMapWidget::ShouldRotateMap() const
 {
 	return false;
@@ -399,6 +426,10 @@ void UOBTacticalMapWidget::OnViewContextUpdated(const FOBNavigationMapViewContex
 		ViewCenterUV = ViewContext.ViewCenterUV;
 		BroadcastViewChanged();
 		RefreshTacticalControlState();
+	}
+	else
+	{
+		RefreshTileDebugState();
 	}
 }
 
@@ -672,8 +703,41 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 	{
 		PanInputText->SetText(FText::FromString(FString::Printf(TEXT("Pan: %.2f, %.2f"), PanInput.X, PanInput.Y)));
 	}
+	RefreshTileDebugState();
 
 	bIsRefreshingTacticalControls = false;
+}
+
+void UOBTacticalMapWidget::RefreshTileDebugState()
+{
+	if (!TileLODText)
+	{
+		return;
+	}
+
+	const FOBMapTileRuntimeStats TileStats = GetTileRuntimeStats();
+	if (TileStats.State == EOBMapTileManagerState::Uninitialized)
+	{
+		TileLODText->SetText(FText::FromString(TEXT("LOD: N/A")));
+		return;
+	}
+
+	if (TileStats.State == EOBMapTileManagerState::Failed)
+	{
+		TileLODText->SetText(FText::FromString(FString::Printf(TEXT("LOD: Failed - %s"), *TileStats.FailureReason)));
+		return;
+	}
+
+	if (TileStats.State != EOBMapTileManagerState::Ready)
+	{
+		TileLODText->SetText(FText::FromString(FString::Printf(TEXT("LOD: %s"), *GetTileManagerStateLabel(TileStats.State))));
+		return;
+	}
+
+	TileLODText->SetText(FText::FromString(FString::Printf(
+		TEXT("LOD: %d/%d | Tiles: %d active, %d loaded, %d cached"),
+		TileStats.ActiveLOD, TileStats.MaxLOD, TileStats.ActiveTileCount,
+		TileStats.LoadedTileCount, TileStats.CachedTileCount)));
 }
 
 void UOBTacticalMapWidget::PopulateLayerComboBox()

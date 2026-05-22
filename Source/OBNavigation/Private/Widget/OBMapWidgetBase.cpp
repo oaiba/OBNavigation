@@ -2,13 +2,20 @@
 
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
+#include "Components/TextBlock.h"
 #include "Data/OBMapMarker.h"
 #include "Data/OBMinimapConfigAsset.h"
 #include "GameFramework/Pawn.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "OBNavigation.h"
 #include "OBNavigationSubsystem.h"
 #include "Widget/OBMapOverlayWidget.h"
+
+FOBMapTileRuntimeStats UOBMapWidgetBase::GetTileRuntimeStats() const
+{
+	return TileManager ? TileManager->GetRuntimeStats() : FOBMapTileRuntimeStats();
+}
 
 void UOBMapWidgetBase::InitializeMapWidget(UOBMinimapConfigAsset* InVisualConfigAsset)
 {
@@ -155,6 +162,7 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 
 	const FOBNavigationMapViewContext ViewContext = BuildViewContext(CurrentLayer, TrackedPawn, ViewCenterUV);
 	UpdateMapMaterial(ViewContext);
+	UpdateMapTiles(CurrentLayer, ViewContext);
 	OnViewContextUpdated(ViewContext, CurrentLayer, TrackedPawn);
 	UpdateMapOverlays(CurrentLayer, ViewContext);
 
@@ -207,6 +215,7 @@ void UOBMapWidgetBase::NativeDestruct()
 	}
 
 	ClearMarkerWidgets();
+	ClearTileWidgets();
 	if (OverlayWidget)
 	{
 		OverlayWidget->RemoveFromParent();
@@ -378,6 +387,338 @@ void UOBMapWidgetBase::UpdateMapMaterial(const FOBNavigationMapViewContext& View
 
 	// Static rotation offset (alignment + custom offset) in radians.
 	MapMaterialInstance->SetScalarParameterValue(TEXT("MapRotationOffsetRad"), FMath::DegreesToRadians(ViewContext.TotalStaticRotation));
+}
+
+void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLayer,
+                                      const FOBNavigationMapViewContext& ViewContext)
+{
+	if (!bAppliedTiledLayer || !TileManager)
+	{
+		return;
+	}
+
+	UCanvasPanel* TileCanvas = EnsureTileLayerCanvas();
+	if (!TileCanvas)
+	{
+		return;
+	}
+
+	const FVector2D CanvasSize = TileCanvas->GetCachedGeometry().GetLocalSize();
+	if (CanvasSize.X <= 0.0f || CanvasSize.Y <= 0.0f)
+	{
+		return;
+	}
+
+	TileManager->UpdateActiveTiles(ViewContext, CanvasSize, GetNavigationSurface(), GetMinimapMaxLODTileLimit());
+	const FOBMapTileRuntimeStats TileStats = TileManager->GetRuntimeStats();
+	if (TileStats.State != LastLoggedTileManagerState)
+	{
+		LastLoggedTileManagerState = TileStats.State;
+		if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+		{
+			if (TileStats.State == EOBMapTileManagerState::Ready)
+			{
+				UE_LOG(LogOBNavigation, Log,
+				       TEXT("[%s::%hs] - Tile manager ready. Layer='%s' RunId='%s' SourceMap='%s' Definition='%s' TileSet='%s' MaxLOD=%d"),
+				       *GetName(), __FUNCTION__, *CurrentLayer.LayerName.ToString(), *TileStats.CaptureRunId,
+				       *TileStats.SourceMapName, *TileStats.DefinitionPath, *TileStats.TileSetPath, TileStats.MaxLOD);
+				if (const UMinimapTileSetDataAsset* TileSet = TileManager->GetTileSet())
+				{
+					for (const FMinimapTilePyramidLevel& Level : TileSet->PyramidLevels)
+					{
+						UE_LOG(LogOBNavigation, Log,
+						       TEXT("[%s::%hs] - TileSet level dump. LOD=%d Grid=%dx%d TilePixels=%dx%d LogicalPixels=%dx%d TileCount=%d"),
+						       *GetName(), __FUNCTION__, Level.LOD, Level.GridDimensions.X, Level.GridDimensions.Y,
+						       Level.TilePixelSize.X, Level.TilePixelSize.Y, Level.LogicalPixelSize.X,
+						       Level.LogicalPixelSize.Y, Level.Tiles.Num());
+
+						const int32 PreviewTileCount = FMath::Min(4, Level.Tiles.Num());
+						for (int32 TileIndex = 0; TileIndex < PreviewTileCount; ++TileIndex)
+						{
+							const FMinimapTileRef& TileRef = Level.Tiles[TileIndex];
+							UE_LOG(LogOBNavigation, Log,
+							       TEXT("[%s::%hs] - TileSet sample. LOD=%d X=%d Y=%d UVMin=%s UVMax=%s WorldBoundsMin=%s WorldBoundsMax=%s Texture='%s'"),
+							       *GetName(), __FUNCTION__, TileRef.Coord.LOD, TileRef.Coord.X, TileRef.Coord.Y,
+							       *TileRef.UVMin.ToString(), *TileRef.UVMax.ToString(),
+							       *TileRef.WorldBounds.Min.ToString(), *TileRef.WorldBounds.Max.ToString(),
+							       *TileRef.Texture.ToSoftObjectPath().ToString());
+						}
+					}
+				}
+			}
+			else if (TileStats.State == EOBMapTileManagerState::Failed)
+			{
+				UE_LOG(LogOBNavigation, Warning,
+				       TEXT("[%s::%hs] - Tile manager failed. Layer='%s' Definition='%s' Reason='%s'"),
+				       *GetName(), __FUNCTION__, *CurrentLayer.LayerName.ToString(), *TileStats.DefinitionPath,
+				       *TileStats.FailureReason);
+			}
+		}
+	}
+
+	TSet<FString> ActiveTileKeys;
+	const bool bShowTileDebug = VisualConfigAsset && VisualConfigAsset->bShowDebugMessages;
+	const bool bLogTacticalTilePlacement = bShowTileDebug
+		&& GetNavigationSurface() == EOBNavigationSurface::FullMap
+		&& TileStats.ActiveLOD != LastLoggedTacticalTileLOD;
+	const FOBNavigationMapViewContext TileViewContext = [&ViewContext]()
+	{
+		FOBNavigationMapViewContext Result = ViewContext;
+		Result.bClampToCanvas = false;
+		return Result;
+	}();
+
+	for (const FOBActiveMapTile& ActiveTile : TileManager->GetActiveTiles())
+	{
+		if (!ActiveTile.Texture)
+		{
+			continue;
+		}
+
+		const FString TileKey = FString::Printf(TEXT("%d:%d:%d"),
+		                                        ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y);
+		ActiveTileKeys.Add(TileKey);
+
+		UImage* TileImage = ActiveTileImages.FindRef(TileKey);
+		if (!TileImage)
+		{
+			TileImage = NewObject<UImage>(this);
+			if (!TileImage)
+			{
+				continue;
+			}
+
+			TileImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+			if (UCanvasPanelSlot* NewSlot = Cast<UCanvasPanelSlot>(TileCanvas->AddChild(TileImage)))
+			{
+				NewSlot->SetAlignment(FVector2D::ZeroVector);
+				NewSlot->SetZOrder(0);
+			}
+			TileImage->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+			ActiveTileImages.Add(TileKey, TileImage);
+		}
+
+		const FVector2D TileUVMin(
+			FMath::Min(ActiveTile.UVMin.X, ActiveTile.UVMax.X),
+			FMath::Min(ActiveTile.UVMin.Y, ActiveTile.UVMax.Y));
+		const FVector2D TileUVMax(
+			FMath::Max(ActiveTile.UVMin.X, ActiveTile.UVMax.X),
+			FMath::Max(ActiveTile.UVMin.Y, ActiveTile.UVMax.Y));
+		const FVector2D TileUVExtent = TileUVMax - TileUVMin;
+		if (TileUVExtent.X <= 0.0f || TileUVExtent.Y <= 0.0f)
+		{
+			TileImage->SetVisibility(ESlateVisibility::Collapsed);
+			UE_LOG(LogOBNavigation, Warning,
+			       TEXT("[%s::%hs] - Skipping tile with invalid UV extent. Tile=%s UVMin=%s UVMax=%s Texture='%s'"),
+			       *GetName(), __FUNCTION__, *TileKey, *ActiveTile.UVMin.ToString(), *ActiveTile.UVMax.ToString(),
+			       *ActiveTile.TextureRef.ToSoftObjectPath().ToString());
+			continue;
+		}
+
+		const FVector2D TileCenterUV = (TileUVMin + TileUVMax) * 0.5f;
+		FOBNavigationCanvasProjection Projection;
+		if (!OBNavigation::MapView::ProjectUVToCanvas(TileCenterUV, CanvasSize, TileViewContext, Projection))
+		{
+			TileImage->SetVisibility(ESlateVisibility::Collapsed);
+			continue;
+		}
+
+		const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
+		const FVector2D TileSize(TileUVExtent.X * CanvasSize.X * SafeZoom, TileUVExtent.Y * CanvasSize.Y * SafeZoom);
+		const FVector2D TileTopLeft = Projection.CanvasPosition - TileSize * 0.5f;
+
+		TileImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+		TileImage->SetRenderTransformAngle(ViewContext.GetAppliedRotationDegrees());
+
+		const bool bUseTileMaskMaterial = ShouldMaskTiledMapTiles() && GetTiledMapTileMaterial();
+		if (bUseTileMaskMaterial)
+		{
+			UMaterialInstanceDynamic* TileMID = ActiveTileMaterialInstances.FindRef(TileKey);
+			if (!TileMID)
+			{
+				TileMID = UMaterialInstanceDynamic::Create(GetTiledMapTileMaterial(), this);
+				ActiveTileMaterialInstances.Add(TileKey, TileMID);
+			}
+
+			if (TileMID)
+			{
+				const FVector2D TileScreenMin = TileTopLeft / CanvasSize;
+				const FVector2D TileScreenMax = (TileTopLeft + TileSize) / CanvasSize;
+				TileMID->SetTextureParameterValue(TEXT("TileTexture"), ActiveTile.Texture);
+				TileMID->SetVectorParameterValue(TEXT("TileScreenMin"), FLinearColor(TileScreenMin.X, TileScreenMin.Y, 0.0f, 0.0f));
+				TileMID->SetVectorParameterValue(TEXT("TileScreenMax"), FLinearColor(TileScreenMax.X, TileScreenMax.Y, 0.0f, 0.0f));
+				TileMID->SetScalarParameterValue(TEXT("ShapeAlpha"), 1.0f);
+				TileImage->SetBrushFromMaterial(TileMID);
+			}
+		}
+		else
+		{
+			ActiveTileMaterialInstances.Remove(TileKey);
+			TileImage->SetBrushFromTexture(ActiveTile.Texture, false);
+			if (ShouldMaskTiledMapTiles() && !bWarnedMissingTiledMapTileMaterial && VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+			{
+				bWarnedMissingTiledMapTileMaterial = true;
+				UE_LOG(LogOBNavigation, Warning,
+				       TEXT("[%s::%hs] - Circle minimap tiled layer is using direct textures because TiledMapTileMaterial is not configured."),
+				       *GetName(), __FUNCTION__);
+			}
+		}
+
+		if (UCanvasPanelSlot* TileSlot = Cast<UCanvasPanelSlot>(TileImage->Slot))
+		{
+			TileSlot->SetAlignment(FVector2D::ZeroVector);
+			TileSlot->SetPosition(TileTopLeft);
+			TileSlot->SetSize(TileSize);
+			TileSlot->SetZOrder(0);
+		}
+
+		if (bShowTileDebug)
+		{
+			UTextBlock* TileLabel = ActiveTileCoordinateLabels.FindRef(TileKey);
+			if (!TileLabel)
+			{
+				TileLabel = NewObject<UTextBlock>(this);
+				if (TileLabel)
+				{
+					TileLabel->SetVisibility(ESlateVisibility::HitTestInvisible);
+					TileLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Yellow));
+					TileLabel->SetShadowColorAndOpacity(FLinearColor::Black);
+					TileLabel->SetShadowOffset(FVector2D(1.0f, 1.0f));
+					FSlateFontInfo LabelFont = TileLabel->GetFont();
+					LabelFont.Size = 12;
+					TileLabel->SetFont(LabelFont);
+					if (UCanvasPanelSlot* NewLabelSlot = Cast<UCanvasPanelSlot>(TileCanvas->AddChild(TileLabel)))
+					{
+						NewLabelSlot->SetAlignment(FVector2D::ZeroVector);
+						NewLabelSlot->SetZOrder(5);
+					}
+					ActiveTileCoordinateLabels.Add(TileKey, TileLabel);
+				}
+			}
+
+			if (TileLabel)
+			{
+				TileLabel->SetVisibility(ESlateVisibility::HitTestInvisible);
+				TileLabel->SetText(FText::FromString(FString::Printf(
+					TEXT("L%d X%d Y%d"),
+					ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y)));
+				if (UCanvasPanelSlot* LabelSlot = Cast<UCanvasPanelSlot>(TileLabel->Slot))
+				{
+					LabelSlot->SetPosition(TileTopLeft + FVector2D(4.0f, 4.0f));
+					LabelSlot->SetSize(FVector2D(160.0f, 24.0f));
+					LabelSlot->SetZOrder(5);
+				}
+			}
+		}
+		else if (UTextBlock* TileLabel = ActiveTileCoordinateLabels.FindRef(TileKey))
+		{
+			TileLabel->RemoveFromParent();
+			ActiveTileCoordinateLabels.Remove(TileKey);
+		}
+
+		UE_LOG(LogOBNavigation, VeryVerbose,
+		       TEXT("[%s::%hs] - Tile placement. Tile=%s Coord=(LOD=%d X=%d Y=%d) UVMin=%s UVMax=%s CenterUV=%s CanvasCenter=%s TopLeft=%s Size=%s Rotation=%.2f Texture='%s'"),
+		       *GetName(), __FUNCTION__, *TileKey, ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y,
+		       *ActiveTile.UVMin.ToString(), *ActiveTile.UVMax.ToString(), *TileCenterUV.ToString(),
+		       *Projection.CanvasPosition.ToString(), *TileTopLeft.ToString(), *TileSize.ToString(),
+		       ViewContext.GetAppliedRotationDegrees(), *ActiveTile.TextureRef.ToSoftObjectPath().ToString());
+
+		if (bLogTacticalTilePlacement)
+		{
+			UE_LOG(LogOBNavigation, Log,
+			       TEXT("[%s::%hs] - Tactical active tile. LOD=%d X=%d Y=%d UVMin=%s UVMax=%s TopLeft=%s Size=%s Texture='%s'"),
+			       *GetName(), __FUNCTION__, ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y,
+			       *ActiveTile.UVMin.ToString(), *ActiveTile.UVMax.ToString(), *TileTopLeft.ToString(),
+			       *TileSize.ToString(), *ActiveTile.TextureRef.ToSoftObjectPath().ToString());
+		}
+	}
+
+	if (bLogTacticalTilePlacement)
+	{
+		LastLoggedTacticalTileLOD = TileStats.ActiveLOD;
+	}
+
+	TArray<FString> TilesToRemove;
+	for (const TPair<FString, TObjectPtr<UImage>>& Pair : ActiveTileImages)
+	{
+		if (!ActiveTileKeys.Contains(Pair.Key))
+		{
+			TilesToRemove.Add(Pair.Key);
+		}
+	}
+
+	for (const FString& TileKey : TilesToRemove)
+	{
+		if (UImage* TileImage = ActiveTileImages.FindRef(TileKey))
+		{
+			TileImage->RemoveFromParent();
+		}
+		ActiveTileImages.Remove(TileKey);
+		ActiveTileMaterialInstances.Remove(TileKey);
+	}
+
+	TArray<FString> TileLabelsToRemove;
+	for (const TPair<FString, TObjectPtr<UTextBlock>>& Pair : ActiveTileCoordinateLabels)
+	{
+		if (!ActiveTileKeys.Contains(Pair.Key) || !bShowTileDebug)
+		{
+			TileLabelsToRemove.Add(Pair.Key);
+		}
+	}
+
+	for (const FString& TileKey : TileLabelsToRemove)
+	{
+		if (UTextBlock* TileLabel = ActiveTileCoordinateLabels.FindRef(TileKey))
+		{
+			TileLabel->RemoveFromParent();
+		}
+		ActiveTileCoordinateLabels.Remove(TileKey);
+	}
+
+	const bool bHasLoadedActiveTiles = !TileManager->GetActiveTiles().IsEmpty()
+		&& ActiveTileImages.Num() >= TileManager->GetActiveTiles().Num();
+	if (MapImage && CurrentLayer.MapTexture)
+	{
+		MapImage->SetVisibility(bHasLoadedActiveTiles ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
+
+	if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1, 0.0f, FColor::Orange,
+				FString::Printf(TEXT("Tiles: LOD %d/%d Active=%d Loaded=%d Cached=%d Run=%s"),
+				                TileStats.ActiveLOD, TileStats.MaxLOD, TileStats.ActiveTileCount,
+				                TileStats.LoadedTileCount, TileStats.CachedTileCount, *TileStats.CaptureRunId));
+		}
+
+		UE_LOG(LogOBNavigation, Verbose,
+		       TEXT("[%s::%hs] - Tiled layer='%s' RunId='%s' SourceMap='%s' ActiveLOD=%d ActiveTiles=%d LoadedTiles=%d CachedTiles=%d"),
+		       *GetName(), __FUNCTION__, *CurrentLayer.LayerName.ToString(),
+		       *TileStats.CaptureRunId, *TileStats.SourceMapName, TileStats.ActiveLOD, TileStats.ActiveTileCount,
+		       TileStats.LoadedTileCount, TileStats.CachedTileCount);
+	}
+}
+
+int32 UOBMapWidgetBase::GetTileBudget() const
+{
+	return VisualConfigAsset ? FMath::Max(1, VisualConfigAsset->TiledMapTileBudget) : 25;
+}
+
+int32 UOBMapWidgetBase::GetMinimapMaxLODTileLimit() const
+{
+	return VisualConfigAsset ? FMath::Max(0, VisualConfigAsset->MinimapMaxLODTileLimit) : 12;
+}
+
+UMaterialInterface* UOBMapWidgetBase::GetTiledMapTileMaterial() const
+{
+	return VisualConfigAsset ? VisualConfigAsset->TiledMapTileMaterial : nullptr;
+}
+
+bool UOBMapWidgetBase::ShouldMaskTiledMapTiles() const
+{
+	return false;
 }
 
 void UOBMapWidgetBase::UpdateMapMarkers(const APawn* TrackedPawn, const FOBNavigationMapLayerSpec& CurrentLayer,
@@ -593,6 +934,75 @@ void UOBMapWidgetBase::ClearMarkerWidgets()
 	ActiveMapMarkerWidgets.Reset();
 }
 
+void UOBMapWidgetBase::ClearTileWidgets()
+{
+	for (const TPair<FString, TObjectPtr<UImage>>& Pair : ActiveTileImages)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->RemoveFromParent();
+		}
+	}
+	ActiveTileImages.Reset();
+	ActiveTileMaterialInstances.Reset();
+
+	for (const TPair<FString, TObjectPtr<UTextBlock>>& Pair : ActiveTileCoordinateLabels)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->RemoveFromParent();
+		}
+	}
+	ActiveTileCoordinateLabels.Reset();
+
+	if (TileLayerCanvas)
+	{
+		TileLayerCanvas->RemoveFromParent();
+		TileLayerCanvas = nullptr;
+	}
+
+	if (TileManager)
+	{
+		TileManager->Shutdown();
+	}
+
+	LastLoggedTileManagerState = EOBMapTileManagerState::Uninitialized;
+	LastLoggedTacticalTileLOD = INDEX_NONE;
+	bWarnedMissingTiledMapTileMaterial = false;
+}
+
+UCanvasPanel* UOBMapWidgetBase::EnsureTileLayerCanvas()
+{
+	if (TileLayerCanvas)
+	{
+		return TileLayerCanvas;
+	}
+
+	UCanvasPanel* MarkerCanvas = GetMarkerCanvas();
+	if (!MarkerCanvas)
+	{
+		return nullptr;
+	}
+
+	TileLayerCanvas = NewObject<UCanvasPanel>(this);
+	if (!TileLayerCanvas)
+	{
+		return nullptr;
+	}
+
+	TileLayerCanvas->SetVisibility(ESlateVisibility::HitTestInvisible);
+	TileLayerCanvas->SetClipping(EWidgetClipping::ClipToBounds);
+	if (UCanvasPanelSlot* TileLayerSlot = Cast<UCanvasPanelSlot>(MarkerCanvas->AddChild(TileLayerCanvas)))
+	{
+		TileLayerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		TileLayerSlot->SetOffsets(FMargin(0.0f));
+		TileLayerSlot->SetAlignment(FVector2D::ZeroVector);
+		TileLayerSlot->SetZOrder(-30);
+	}
+
+	return TileLayerCanvas;
+}
+
 void UOBMapWidgetBase::ApplyMapLayer(const FOBNavigationMapLayerSpec& NewLayerSpec)
 {
 	if (!MapMaterialInstance || !MapImage)
@@ -600,13 +1010,56 @@ void UOBMapWidgetBase::ApplyMapLayer(const FOBNavigationMapLayerSpec& NewLayerSp
 		return;
 	}
 
-	if (AppliedLayerName == NewLayerSpec.LayerName && AppliedMapTexture == NewLayerSpec.MapTexture)
+	if (AppliedLayerName == NewLayerSpec.LayerName
+		&& AppliedMapTexture == NewLayerSpec.MapTexture
+		&& AppliedPanoramicDefinition == NewLayerSpec.PanoramicDefinition
+		&& bAppliedTiledLayer == NewLayerSpec.IsTiledLayer())
 	{
 		return;
 	}
 
+	const bool bUseTiledLayer = NewLayerSpec.IsTiledLayer();
 	AppliedLayerName = NewLayerSpec.LayerName;
 	AppliedMapTexture = NewLayerSpec.MapTexture;
+	AppliedPanoramicDefinition = NewLayerSpec.PanoramicDefinition;
+	bAppliedTiledLayer = bUseTiledLayer;
+
+	ClearTileWidgets();
+
+	if (bUseTiledLayer)
+	{
+		if (!TileManager)
+		{
+			TileManager = NewObject<UOBMapTileManager>(this);
+		}
+
+		if (TileManager)
+		{
+			TileManager->Initialize(NewLayerSpec, GetTileBudget());
+		}
+
+		if (NewLayerSpec.MapTexture)
+		{
+			MapMaterialInstance->SetTextureParameterValue("MapTexture", NewLayerSpec.MapTexture);
+			MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		else
+		{
+			MapImage->SetVisibility(ESlateVisibility::Collapsed);
+		}
+
+		EnsureTileLayerCanvas();
+		if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+		{
+			UE_LOG(LogOBNavigation, Log,
+			       TEXT("[%s::%hs] - Applied tiled map layer. Layer='%s' Definition='%s' BoundsMin=%s BoundsMax=%s MapRotation=%.2f MaxLOD=%d"),
+			       *GetName(), __FUNCTION__, *NewLayerSpec.LayerName.ToString(),
+			       *NewLayerSpec.PanoramicDefinition.ToSoftObjectPath().ToString(),
+			       *NewLayerSpec.WorldBounds.Min.ToString(), *NewLayerSpec.WorldBounds.Max.ToString(),
+			       NewLayerSpec.MapRotationDegrees, TileManager ? TileManager->GetMaxLOD() : INDEX_NONE);
+		}
+		return;
+	}
 
 	if (NewLayerSpec.MapTexture)
 	{

@@ -71,7 +71,7 @@ namespace
 		{
 			const FOBNavigationMapLayerSpec& LayerSpec = LayerSpecs[LayerIndex];
 			CandidateDescriptions.Add(FString::Printf(
-				TEXT("#%d Name='%s' Priority=%d ValidBounds=%s InsideXY=%s Clamp=%s CanProject=%s BoundsMin=%s BoundsMax=%s Texture='%s'"),
+				TEXT("#%d Name='%s' Priority=%d ValidBounds=%s InsideXY=%s Clamp=%s CanProject=%s BoundsMin=%s BoundsMax=%s Texture='%s' Panoramic='%s' Tiled=%s"),
 				LayerIndex,
 				*LayerSpec.LayerName.ToString(),
 				LayerSpec.Priority,
@@ -81,7 +81,9 @@ namespace
 				LayerSpec.CanProjectWorldLocation(WorldLocation) ? TEXT("true") : TEXT("false"),
 				*LayerSpec.WorldBounds.Min.ToCompactString(),
 				*LayerSpec.WorldBounds.Max.ToCompactString(),
-				*GetNameSafe(LayerSpec.MapTexture)));
+				*GetNameSafe(LayerSpec.MapTexture),
+				*LayerSpec.PanoramicDefinition.ToSoftObjectPath().ToString(),
+				LayerSpec.IsTiledLayer() ? TEXT("true") : TEXT("false")));
 		}
 
 		return CandidateDescriptions.Num() > 0 ? FString::Join(CandidateDescriptions, TEXT(" | ")) : TEXT("None");
@@ -233,7 +235,18 @@ void UOBNavigationSubsystem::SetRuntimeMapLayers(const TArray<FOBNavigationMapLa
 	{
 		if (LayerSpec.LayerName.IsNone())
 		{
-			LayerSpec.LayerName = LayerSpec.MapTexture ? LayerSpec.MapTexture->GetFName() : NAME_None;
+			if (LayerSpec.MapTexture)
+			{
+				LayerSpec.LayerName = LayerSpec.MapTexture->GetFName();
+			}
+			else if (!LayerSpec.PanoramicDefinition.IsNull())
+			{
+				LayerSpec.LayerName = FName(*LayerSpec.PanoramicDefinition.GetAssetName());
+			}
+			else
+			{
+				LayerSpec.LayerName = NAME_None;
+			}
 		}
 		RuntimeMapLayerSpecs.Add(LayerSpec);
 	}
@@ -703,6 +716,7 @@ bool UOBNavigationSubsystem::IsDifferentCurrentLayer(const FOBNavigationMapLayer
 
 	return CurrentMapLayerSpec.LayerName != NewLayerSpec->LayerName
 		|| CurrentMapLayerSpec.MapTexture != NewLayerSpec->MapTexture
+		|| CurrentMapLayerSpec.PanoramicDefinition != NewLayerSpec->PanoramicDefinition
 		|| CurrentMapLayerSpec.WorldBounds.Min != NewLayerSpec->WorldBounds.Min
 		|| CurrentMapLayerSpec.WorldBounds.Max != NewLayerSpec->WorldBounds.Max
 		|| CurrentMapLayerSpec.Priority != NewLayerSpec->Priority

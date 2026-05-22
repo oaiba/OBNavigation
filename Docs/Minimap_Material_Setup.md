@@ -1,158 +1,184 @@
-# Minimap Material Setup Guide
+# Hướng Dẫn Thiết Lập Material Cho Minimap
 
-> **Purpose**: This document walks you through creating a **custom material** for the OBNavigation minimap that matches the C++ parameters we exposed in `UOBMapWidgetBase::UpdateMapMaterial`.
+> **Mục đích**: Tài liệu này hướng dẫn tạo **custom material** cho minimap của OBNavigation, khớp với các tham số C++ được truyền trong `UOBMapWidgetBase::UpdateMapMaterial`.
 
----
-
-## 1. Overview of the Required Parameters
-| Parameter (C++) | Material Input | Type | Description |
-|-----------------|----------------|------|-------------|
-| `ViewCenterUV`  | **PlayerPosUV** (Custom Node) | `float2` | UV coordinate of the player on the map texture (centre of the view). |
-| `PlayerYawRad`  | **PlayerYawRad** | `float` | Dynamic rotation from the player (control or actor rotation). |
-| `ZoomAmount`    | **ZoomAmount** | `float` | Zoom multiplier – >1 zooms in, <1 zooms out. |
-| `MapRotationOffsetRad` | **MapRotationOffsetRad** | `float` | Static base rotation for the whole map (alignment + custom offset). |
-| `Map`           | **Map** (Texture2D) | `Texture2D` | The actual minimap texture (usually a render target or static map atlas). |
-| `MapSampler`    | **MapSampler** (Sampler) | `SamplerState` | Sampler for the map texture. |
-| `UV` (screen)   | **UV** (float2) | `float2` | Built‑in UV of the widget (0‑1 across the widget). |
-
-> **NOTE**: The material **must** use the exact parameter names shown above – the C++ code sets them with `TEXT("…")`. Mismatched names will cause the material to ignore the values and the minimap will appear static.
+Để xem toàn bộ quy trình thiết lập tiled minimap/tactical map, đọc thêm `Tiled_Minimap_Setup.md`.
 
 ---
 
-## 2. Create the Material
-1. In the **Content Browser**, right‑click → **Material** → name it e.g. `M_MinimapBackground`.
-2. Open the material editor and set **Material Domain** to **User Interface**.
-3. Set **Blend Mode** to **Transparent** (or **Masked** if you only need an opaque map). This matches the UI widget expectations.
-4. Turn **Two‑Sided** on if you ever use a mirrored map.
+## 1. Tổng Quan Các Tham Số Bắt Buộc
+
+| Tham số C++ | Input trong Material | Kiểu | Mô tả |
+|---|---|---|---|
+| `ViewCenterUV` | **PlayerPosUV** (Custom Node) | `float2` | Tọa độ UV của người chơi trên texture bản đồ, là tâm của vùng nhìn. |
+| `PlayerYawRad` | **PlayerYawRad** | `float` | Góc xoay động từ người chơi, theo control rotation hoặc actor rotation. |
+| `ZoomAmount` | **ZoomAmount** | `float` | Hệ số zoom; lớn hơn `1` là zoom vào, nhỏ hơn `1` là zoom ra. |
+| `MapRotationOffsetRad` | **MapRotationOffsetRad** | `float` | Góc xoay tĩnh của toàn bản đồ, gồm alignment và offset tùy chỉnh. |
+| `Map` | **Map** (Texture2D) | `Texture2D` | Texture minimap thực tế, thường là render target hoặc static map atlas. |
+| `MapSampler` | **MapSampler** (Sampler) | `SamplerState` | Sampler dùng để lấy mẫu map texture. |
+| `UV` (screen) | **UV** (float2) | `float2` | UV mặc định của widget, từ `0-1` trên toàn widget. |
+
+> **Lưu ý**: Material phải dùng đúng tên tham số ở trên. Code C++ set các tham số bằng `TEXT("...")`. Nếu tên không khớp, material sẽ bỏ qua giá trị và minimap có thể đứng yên.
 
 ---
 
-## 3. Add the Custom Expression Node
-1. Drag a **Custom** node onto the graph.
-2. In the node's **Details** panel:
-   - **Code**: paste the HLSL code you posted (see below).
-   - **Inputs**: add the following inputs (order does not matter, but names must match exactly):
-     ```
-     UV                (float2)
-     Map               (Texture2D)
-     MapSampler        (SamplerState)
-     PlayerPosUV       (float2)
-     PlayerYawRad      (float)
+## 2. Tạo Material
+
+1. Trong **Content Browser**, nhấn chuột phải -> **Material** -> đặt tên, ví dụ `M_MinimapBackground`.
+2. Mở material editor và đặt **Material Domain** thành **User Interface**.
+3. Đặt **Blend Mode** thành **Transparent** hoặc **Masked** nếu chỉ cần bản đồ opaque.
+4. Bật **Two-Sided** nếu có khả năng dùng bản đồ bị mirror.
+
+---
+
+## 3. Thêm Custom Expression Node
+
+1. Kéo một node **Custom** vào graph.
+2. Trong panel **Details** của node:
+   - **Code**: dán đoạn HLSL bên dưới.
+   - **Inputs**: thêm các input sau. Thứ tự không quan trọng, nhưng tên phải khớp chính xác:
+     ```text
+     UV                   (float2)
+     Map                  (Texture2D)
+     MapSampler           (SamplerState)
+     PlayerPosUV          (float2)
+     PlayerYawRad         (float)
      MapRotationOffsetRad (float)
-     ZoomAmount        (float)
+     ZoomAmount           (float)
      ```
-   - **Outputs**: set a single output named `Result` of type **float4** (the sampled colour).
-3. Connect the **Result** output to the **Base Color** slot of the material node.
+   - **Outputs**: đặt một output tên `Result`, kiểu **float4**.
+3. Nối output **Result** vào **Base Color** của material node.
 
-### HLSL Code for the Custom Node
+### HLSL Cho Custom Node
+
 ```hlsl
-// Input parameters
-// float2 UV: The default screen texture coordinates of the UI widget (0-1).
-// Texture2D Map: The map texture to sample.
-// SamplerState MapSampler: The sampler for the texture.
-// float2 PlayerPosUV: The player's calculated position on the map texture (U,V space).
-// float PlayerYawRad: The DYNAMIC rotation based on the player (0 if map is static).
-// float MapRotationOffsetRad: The STATIC base rotation for the entire map view.
-// float ZoomAmount: How much to zoom in.
+// Tham số đầu vào
+// float2 UV: Tọa độ texture mặc định của UI widget (0-1).
+// Texture2D Map: Texture bản đồ cần sample.
+// SamplerState MapSampler: Sampler của texture.
+// float2 PlayerPosUV: Vị trí người chơi trên map texture theo không gian U,V.
+// float PlayerYawRad: Góc xoay động theo người chơi (0 nếu map không xoay động).
+// float MapRotationOffsetRad: Góc xoay tĩnh của toàn bộ map view.
+// float ZoomAmount: Mức zoom vào.
 
-// The center of our screen/widget. All rotations happen around this point.
+// Tâm của màn hình/widget. Mọi phép xoay diễn ra quanh điểm này.
 float2 Center = float2(0.5, 0.5);
 
-// 1. Start with the screen's current UV coordinate.
+// 1. Bắt đầu từ UV hiện tại của pixel trên màn hình.
 float2 ScreenPixelUV = UV;
 
-// 2. Offset so the player ends up at the centre.
+// 2. Dịch offset để người chơi nằm ở tâm.
 float2 OffsetFromCenter = ScreenPixelUV - Center;
 
-// 3. Apply zoom (larger ZoomAmount -> smaller offset -> zoom‑in).
+// 3. Áp dụng zoom. ZoomAmount lớn hơn làm offset nhỏ hơn, tức zoom vào.
 OffsetFromCenter /= ZoomAmount;
 
-// 4. Inverse dynamic player rotation.
+// 4. Xoay ngược theo yaw động của người chơi.
 float PlayerCos = cos(-PlayerYawRad);
 float PlayerSin = sin(-PlayerYawRad);
 float2x2 PlayerRotationMatrix = float2x2(PlayerCos, -PlayerSin, PlayerSin, PlayerCos);
 OffsetFromCenter = mul(OffsetFromCenter, PlayerRotationMatrix);
 
-// 5. Inverse static base rotation.
+// 5. Xoay ngược theo góc tĩnh của bản đồ.
 float MapCos = cos(-MapRotationOffsetRad);
 float MapSin = sin(-MapRotationOffsetRad);
 float2x2 MapRotationMatrix = float2x2(MapCos, -MapSin, MapSin, MapCos);
 OffsetFromCenter = mul(OffsetFromCenter, MapRotationMatrix);
 
-// 6. Final texture coordinate to sample.
+// 6. Tọa độ cuối cùng để sample texture.
 float2 FinalUVsToSample = PlayerPosUV + OffsetFromCenter;
 
-// 7. Sample the map texture.
+// 7. Sample map texture.
 return Map.Sample(MapSampler, FinalUVsToSample);
 ```
 
 ---
 
-## 4. Wire the Material to the Widget
-1. In the **Widget Blueprint** (e.g. `WBP_Minimap`), select the **Image** that displays the background (`MapImage`).
-2. In the **Details** panel, set **Brush → Material** to the material you just created (`M_MinimapBackground`).
-3. The widget’s C++ code (`UOBMapWidgetBase::InitializeMapWidget`) will create a **Dynamic Material Instance** from this material and store it in `MapMaterialInstance`.
-4. At runtime the following parameters are set each tick:
+## 4. Gắn Material Vào Widget
+
+1. Trong **Widget Blueprint**, ví dụ `WBP_Minimap`, chọn **Image** hiển thị background tên `MapImage`.
+2. Trong panel **Details**, đặt **Brush -> Material** thành material vừa tạo, ví dụ `M_MinimapBackground`.
+3. Code C++ của widget (`UOBMapWidgetBase::InitializeMapWidget`) sẽ tạo **Dynamic Material Instance** từ material này và lưu vào `MapMaterialInstance`.
+4. Ở runtime, các tham số sau được set mỗi tick:
    ```cpp
-   // View‑center UV (player’s world position on the map)
+   // UV tâm view, thường là vị trí người chơi trên map
    MapMaterialInstance->SetVectorParameterValue(TEXT("ViewCenterUV"), ViewCenterUVColor);
 
-   // Dynamic yaw (radians, based on config)
+   // Yaw động, tính bằng radians, dựa trên config
    MapMaterialInstance->SetScalarParameterValue(TEXT("PlayerYawRad"), ...);
 
-   // Zoom amount
+   // Mức zoom
    MapMaterialInstance->SetScalarParameterValue(TEXT("ZoomAmount"), CurrentZoom);
 
-   // Static rotation offset (radians)
+   // Offset xoay tĩnh, tính bằng radians
    MapMaterialInstance->SetScalarParameterValue(TEXT("MapRotationOffsetRad"), ...);
    ```
 
-> **IMPORTANT**: The **parameter names** used here (`ViewCenterUV`, `PlayerYawRad`, `ZoomAmount`, `MapRotationOffsetRad`) must match the **input names** you defined in the Custom node. If you rename any of them, update both the material and the C++ code accordingly.
+> **Quan trọng**: Tên tham số `ViewCenterUV`, `PlayerYawRad`, `ZoomAmount`, `MapRotationOffsetRad` phải khớp với input trong Custom node. Nếu đổi tên ở material, phải cập nhật cả code C++ tương ứng.
 
 ---
 
-## 5. Verify the Setup
-1. **Play the game** in the editor.
-2. Open the **Output Log** – you should see lines like:
-   ```
-   [WBP_Minimap::NativeTick] - Trace #N … ViewCenterUV= X=0.439 Y=0.510 …
-   ```
-3. The minimap background should **scroll** under the player marker as you move the pawn.
-4. Rotate the camera (if using `ControlRotation`) – the map should rotate smoothly.
-5. Adjust **ZoomAmount** in the `UOBMinimapConfigAsset` – you’ll see the map zoom in/out instantly.
+## 5. Kiểm Tra Thiết Lập
 
-If the map stays static:
-- Confirm the material instance is **created** (`MapMaterialInstance` is non‑null). Add a `UE_LOG` after `CreateDynamicMaterialInstance` if needed.
-- Check the **parameter names** inside the material (hover over the Custom node inputs). They must be exactly `ViewCenterUV`, `PlayerYawRad`, `ZoomAmount`, `MapRotationOffsetRad`.
-- Verify that the **Map texture** is correctly assigned to the `Map` input (use a simple test texture first).
+1. Chạy game trong editor.
+2. Mở **Output Log**. Bạn nên thấy log tương tự:
+   ```text
+   [WBP_Minimap::NativeTick] - Trace #N ... ViewCenterUV= X=0.439 Y=0.510 ...
+   ```
+3. Background minimap phải trượt dưới marker người chơi khi pawn di chuyển.
+4. Xoay camera nếu dùng `ControlRotation`; bản đồ phải xoay mượt.
+5. Điều chỉnh **ZoomAmount** trong `UOBMinimapConfigAsset`; bản đồ phải zoom vào/ra ngay.
+
+Nếu bản đồ đứng yên:
+
+- Xác nhận material instance đã được tạo (`MapMaterialInstance` khác null). Có thể thêm `UE_LOG` sau `CreateDynamicMaterialInstance` nếu cần.
+- Kiểm tra tên tham số trong material. Hover vào input của Custom node và đảm bảo đúng `ViewCenterUV`, `PlayerYawRad`, `ZoomAmount`, `MapRotationOffsetRad`.
+- Kiểm tra **Map texture** đã được gán đúng vào input `Map`. Nên thử bằng một texture đơn giản trước.
 
 ---
 
-## 6. Optional – Adding a Debug Overlay
-If you want to visualise the player’s UV location on the map texture:
-1. Add a **Scalar Parameter** called `DebugShowMarker` (default `0`).
-2. In the Custom node, after `float2 FinalUVsToSample = …;` you can do:
+## 6. Tùy Chọn: Thêm Debug Overlay
+
+Nếu muốn hiển thị vị trí UV của người chơi trên map texture:
+
+1. Thêm **Scalar Parameter** tên `DebugShowMarker`, mặc định `0`.
+2. Trong Custom node, sau dòng `float2 FinalUVsToSample = ...;`, có thể thêm:
    ```hlsl
    if (DebugShowMarker > 0.5)
    {
-       // Draw a small red dot at the player position for debugging.
+       // Vẽ một chấm đỏ nhỏ tại vị trí người chơi để debug.
        if (distance(FinalUVsToSample, PlayerPosUV) < 0.005)
            return float4(1,0,0,1); // red dot
    }
    ```
-3. Expose this parameter from C++ if you need to toggle it at runtime.
+3. Expose tham số này từ C++ nếu cần bật/tắt ở runtime.
 
 ---
 
-## 7. Summary Checklist
-- [ ] Create material `M_MinimapBackground` (UI domain, Transparent blend). 
-- [ ] Add a **Custom** node with the HLSL code above. 
-- [ ] Define inputs: `UV`, `Map`, `MapSampler`, `PlayerPosUV`, `PlayerYawRad`, `MapRotationOffsetRad`, `ZoomAmount`. 
-- [ ] Output -> **Base Color** (float4). 
-- [ ] Assign the material to the widget’s `MapImage`. 
-- [ ] Ensure C++ `UpdateMapMaterial` sets the four parameters with the exact names. 
-- [ ] Test in‑game: player marker stays centred, background scrolls, rotation & zoom work. 
+## 7. Tùy Chọn: Material Cho Tile Của Tiled Minimap
+
+Các layer Panoramic dạng tiled có thể render từng tile texture riêng thay vì một atlas texture duy nhất. Minimap vuông và tactical map có thể dùng direct tile brush. Minimap tròn nên gán `TiledMapTileMaterial` trong `UOBMinimapConfigAsset` để từng tile áp dụng cùng mask tròn như single-texture path.
+
+Tạo một UI material có các tham số sau:
+
+| Tham số | Kiểu | Mô tả |
+|---|---|---|
+| `TileTexture` | Texture2D | Texture tile đã load. |
+| `TileScreenMin` | Vector | Điểm min của rect tile trong không gian màn hình chuẩn hóa. |
+| `TileScreenMax` | Vector | Điểm max của rect tile trong không gian màn hình chuẩn hóa. |
+| `ShapeAlpha` | Scalar | `1.0` để dùng hành vi mask tròn. |
+
+Nếu không gán `TiledMapTileMaterial` và `MinimapShape` là `Circle`, OBNavigation sẽ fallback sang direct tile texture và log một warning trong debug mode.
 
 ---
 
-*Enjoy a smooth, professional minimap that feels premium and fully dynamic!*
+## 8. Danh Sách Tổng Kết
+
+- [ ] Tạo material `M_MinimapBackground` với domain **User Interface** và blend **Transparent**.
+- [ ] Thêm node **Custom** với HLSL ở trên.
+- [ ] Định nghĩa input: `UV`, `Map`, `MapSampler`, `PlayerPosUV`, `PlayerYawRad`, `MapRotationOffsetRad`, `ZoomAmount`.
+- [ ] Nối output vào **Base Color** kiểu `float4`.
+- [ ] Gán material vào `MapImage` của widget.
+- [ ] Đảm bảo C++ `UpdateMapMaterial` set đúng bốn tham số runtime.
+- [ ] Test trong game: marker người chơi nằm giữa, background trượt, rotation và zoom hoạt động.
+- [ ] Với minimap tròn dạng tiled, gán `TiledMapTileMaterial` có `TileTexture`, `TileScreenMin`, `TileScreenMax`, `ShapeAlpha`.
