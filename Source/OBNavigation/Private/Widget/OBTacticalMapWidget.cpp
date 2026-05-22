@@ -121,14 +121,26 @@ void UOBTacticalMapWidget::AddPanInput(const FVector2D PanDelta)
 		return;
 	}
 
+	FOBNavigationMapLayerSpec CurrentLayer;
+	if (!ResolveActiveLayer(CurrentLayer))
+	{
+		return;
+	}
+
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	if (!MapViewport.IsValid())
+	{
+		return;
+	}
+
 	const float AppliedRotation = -GetTotalStaticRotation();
 	const FVector2D UnrotatedPanDelta = PanDelta.GetRotated(-AppliedRotation);
 	const float SafeZoom = FMath::Max(GetMapZoom(), KINDA_SMALL_NUMBER);
 
 	// Convert screen-space panning into UV distance; zoomed-in views move less per pixel.
 	const FVector2D UVDelta(
-		UnrotatedPanDelta.X / (CanvasSize.X * SafeZoom),
-		UnrotatedPanDelta.Y / (CanvasSize.Y * SafeZoom));
+		UnrotatedPanDelta.X / (MapViewport.Size.X * SafeZoom),
+		UnrotatedPanDelta.Y / (MapViewport.Size.Y * SafeZoom));
 
 	SetViewCenterUVInternal(ViewCenterUV - UVDelta, false);
 }

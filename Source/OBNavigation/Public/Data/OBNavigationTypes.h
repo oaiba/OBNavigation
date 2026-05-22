@@ -277,6 +277,14 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
 	FIntPoint OutputSize = FIntPoint::ZeroValue;
 
+	/** World-space center of the actual captured texture footprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	FVector ProjectionWorldCenter = FVector::ZeroVector;
+
+	/** World-space XY size of the actual captured texture footprint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
+	FVector2D ProjectionWorldSize = FVector2D::ZeroVector;
+
 	/** Selection priority; larger values win when multiple layers contain the pawn. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
 	int32 Priority = 0;
@@ -295,6 +303,15 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 
 	/** Returns true when WorldBounds is valid and has non-zero XY extent. */
 	bool HasValidWorldBounds() const;
+
+	/** Returns true when the texture projection footprint has non-zero XY extent. */
+	bool HasValidProjectionFrame() const;
+
+	/** Returns the projection center, deriving from WorldBounds when older specs omit explicit frame data. */
+	FVector GetProjectionWorldCenter() const;
+
+	/** Returns the projection size, deriving from WorldBounds/OutputSize when older specs omit explicit frame data. */
+	FVector2D GetProjectionWorldSize() const;
 
 	/** Returns true when this layer references a Panoramic definition. */
 	bool HasPanoramicDefinition() const;

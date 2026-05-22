@@ -316,8 +316,8 @@ float UOBMapTileManager::CalculateWorldUnitsPerPixel(const FOBNavigationMapViewC
 		return 0.0f;
 	}
 
-	const FVector WorldSize = LayerSpec.WorldBounds.GetSize();
-	const float LargerWorldAxis = FMath::Max(FMath::Abs(WorldSize.X), FMath::Abs(WorldSize.Y));
+	const FVector2D ProjectionWorldSize = LayerSpec.GetProjectionWorldSize();
+	const float LargerWorldAxis = FMath::Max(ProjectionWorldSize.X, ProjectionWorldSize.Y);
 	const float LargerCanvasAxis = FMath::Max(CanvasSize.X, CanvasSize.Y);
 	return LargerWorldAxis / (LargerCanvasAxis * FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER));
 }

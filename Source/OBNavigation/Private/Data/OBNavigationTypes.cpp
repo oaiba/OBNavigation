@@ -4,22 +4,38 @@
 
 namespace
 {
-FVector2D ApplyMapRotation(const FVector2D& InUV, const float RotationDegrees)
+bool HasUsableOutputSize(const FIntPoint& OutputSize)
 {
-	if (FMath::IsNearlyZero(RotationDegrees))
+	return OutputSize.X > 0 && OutputSize.Y > 0;
+}
+
+bool HasUsableProjectionSize(const FVector2D& ProjectionWorldSize)
+{
+	return ProjectionWorldSize.X > 0.0f && ProjectionWorldSize.Y > 0.0f;
+}
+
+FVector2D CalculateProjectionWorldSize(const FBox& WorldBounds, const FIntPoint& OutputSize)
+{
+	const FVector WorldSize = WorldBounds.GetSize();
+	if (!WorldBounds.IsValid || FMath::IsNearlyZero(WorldSize.X) || FMath::IsNearlyZero(WorldSize.Y))
 	{
-		return InUV;
+		return FVector2D::ZeroVector;
 	}
 
-	const FVector2D Center(0.5f, 0.5f);
-	const float Radians = FMath::DegreesToRadians(RotationDegrees);
-	const float CosAngle = FMath::Cos(Radians);
-	const float SinAngle = FMath::Sin(Radians);
-	const FVector2D Offset = InUV - Center;
+	if (!HasUsableOutputSize(OutputSize))
+	{
+		return FVector2D(FMath::Abs(WorldSize.X), FMath::Abs(WorldSize.Y));
+	}
 
-	return Center + FVector2D(
-		Offset.X * CosAngle - Offset.Y * SinAngle,
-		Offset.X * SinAngle + Offset.Y * CosAngle);
+	const float AspectRatio = static_cast<float>(OutputSize.X) / static_cast<float>(OutputSize.Y);
+	if (AspectRatio >= 1.0f)
+	{
+		const float Width = FMath::Max(FMath::Abs(WorldSize.X), FMath::Abs(WorldSize.Y) * AspectRatio);
+		return FVector2D(Width, Width / AspectRatio);
+	}
+
+	const float Height = FMath::Max(FMath::Abs(WorldSize.Y), FMath::Abs(WorldSize.X) / AspectRatio);
+	return FVector2D(Height * AspectRatio, Height);
 }
 
 bool IsInsideOrOnBoundsXY(const FBox& Bounds, const FVector& WorldLocation)
@@ -30,17 +46,38 @@ bool IsInsideOrOnBoundsXY(const FBox& Bounds, const FVector& WorldLocation)
 		&& WorldLocation.Y <= Bounds.Max.Y;
 }
 
-FVector2D ProjectWorldToPanoramicMapUV(const FBox& WorldBounds, const float MapRotationDegrees,
+FVector ClampWorldLocationToBoundsXY(const FVector& WorldLocation, const FBox& Bounds)
+{
+	if (!Bounds.IsValid)
+	{
+		return WorldLocation;
+	}
+
+	return FVector(
+		FMath::Clamp(WorldLocation.X, Bounds.Min.X, Bounds.Max.X),
+		FMath::Clamp(WorldLocation.Y, Bounds.Min.Y, Bounds.Max.Y),
+		WorldLocation.Z);
+}
+
+FVector2D ProjectWorldToPanoramicMapUV(const FVector& ProjectionWorldCenter, const FVector2D& ProjectionWorldSize,
+                                       const float MapRotationDegrees,
                                        const FVector& WorldLocation)
 {
-	const FVector BoundsMin = WorldBounds.Min;
-	const FVector BoundsSize = WorldBounds.GetSize();
+	if (!HasUsableProjectionSize(ProjectionWorldSize))
+	{
+		return FVector2D::ZeroVector;
+	}
 
-	const FVector2D RawUV(
-		(WorldLocation.X - BoundsMin.X) / BoundsSize.X,
-		1.0f - ((WorldLocation.Y - BoundsMin.Y) / BoundsSize.Y));
-	const FVector2D RotatedUV = ApplyMapRotation(RawUV, MapRotationDegrees);
-	return FVector2D(RotatedUV.X, 1.0f - RotatedUV.Y);
+	const float Radians = FMath::DegreesToRadians(MapRotationDegrees);
+	const float CosAngle = FMath::Cos(Radians);
+	const float SinAngle = FMath::Sin(Radians);
+	const FVector WorldDelta = WorldLocation - ProjectionWorldCenter;
+	const float LocalX = WorldDelta.X * CosAngle + WorldDelta.Y * SinAngle;
+	const float LocalY = -WorldDelta.X * SinAngle + WorldDelta.Y * CosAngle;
+
+	return FVector2D(
+		0.5f + LocalX / ProjectionWorldSize.X,
+		0.5f + LocalY / ProjectionWorldSize.Y);
 }
 
 EOBNavigationOverlayElementType ConvertPanoramicOverlayElementType(const EMinimapOverlayElementType SourceType)
@@ -98,6 +135,23 @@ bool FOBNavigationMapLayerSpec::HasValidWorldBounds() const
 		&& !FMath::IsNearlyZero(WorldSize.Y);
 }
 
+bool FOBNavigationMapLayerSpec::HasValidProjectionFrame() const
+{
+	return HasUsableProjectionSize(GetProjectionWorldSize());
+}
+
+FVector FOBNavigationMapLayerSpec::GetProjectionWorldCenter() const
+{
+	return HasUsableProjectionSize(ProjectionWorldSize) ? ProjectionWorldCenter : WorldBounds.GetCenter();
+}
+
+FVector2D FOBNavigationMapLayerSpec::GetProjectionWorldSize() const
+{
+	return HasUsableProjectionSize(ProjectionWorldSize)
+		       ? ProjectionWorldSize
+		       : CalculateProjectionWorldSize(WorldBounds, OutputSize);
+}
+
 bool FOBNavigationMapLayerSpec::HasPanoramicDefinition() const
 {
 	return !PanoramicDefinition.IsNull();
@@ -144,6 +198,7 @@ bool FOBNavigationMapLayerSpec::PopulateFromPanoramicDefinition(const UMinimapDe
 	PanoramicDefinition = TSoftObjectPtr<UMinimapDefinitionDataAsset>(const_cast<UMinimapDefinitionDataAsset*>(MinimapDefinition));
 	WorldBounds = MinimapDefinition->WorldBounds;
 	OutputSize = MinimapDefinition->OutputSize;
+	MinimapDefinition->ResolveProjectionFrame(ProjectionWorldCenter, ProjectionWorldSize);
 	Priority = InPriority;
 	MapRotationDegrees = MinimapDefinition->MapRotationDegrees;
 	bClampQueriesToBounds = bForceClampQueriesToBounds || MinimapDefinition->bClampQueriesToBounds;
@@ -175,6 +230,11 @@ bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldL
 		OutResult = EOBMapProjectionResult::InvalidBounds;
 		return false;
 	}
+	if (!HasValidProjectionFrame())
+	{
+		OutResult = EOBMapProjectionResult::InvalidBounds;
+		return false;
+	}
 
 	const bool bInsideBounds = IsInsideOrOnBoundsXY(WorldBounds, WorldLocation);
 	if (!bInsideBounds && !bClampQueriesToBounds)
@@ -183,7 +243,14 @@ bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldL
 		return false;
 	}
 
-	OutMapUV = ProjectWorldToPanoramicMapUV(WorldBounds, MapRotationDegrees, WorldLocation);
+	const FVector ProjectedWorldLocation = bClampQueriesToBounds
+		                                       ? ClampWorldLocationToBoundsXY(WorldLocation, WorldBounds)
+		                                       : WorldLocation;
+	OutMapUV = ProjectWorldToPanoramicMapUV(
+		GetProjectionWorldCenter(),
+		GetProjectionWorldSize(),
+		MapRotationDegrees,
+		ProjectedWorldLocation);
 
 	if (bClampQueriesToBounds)
 	{
@@ -217,10 +284,10 @@ FOBNavigationMapViewport OBNavigation::MapView::CalculateMapViewport(const FVect
 	}
 	else if (LayerSpec.HasValidWorldBounds())
 	{
-		const FVector WorldSize = LayerSpec.WorldBounds.GetSize();
-		if (!FMath::IsNearlyZero(WorldSize.Y))
+		const FVector2D ProjectionWorldSize = LayerSpec.GetProjectionWorldSize();
+		if (!FMath::IsNearlyZero(ProjectionWorldSize.Y))
 		{
-			DesiredAspectRatio = FMath::Abs(WorldSize.X / WorldSize.Y);
+			DesiredAspectRatio = FMath::Abs(ProjectionWorldSize.X / ProjectionWorldSize.Y);
 		}
 	}
 	DesiredAspectRatio = FMath::Max(DesiredAspectRatio, KINDA_SMALL_NUMBER);
