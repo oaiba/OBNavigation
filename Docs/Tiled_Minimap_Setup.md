@@ -197,6 +197,12 @@ Các tham số runtime bắt buộc. Tên parameter `MapTexture` vẫn được 
 
 Với minimap tròn dạng tiled, gán `TiledMapTileMaterial` trong `UOBMinimapConfigAsset`.
 
+Hướng dẫn đầy đủ cách tạo material:
+
+```text
+OBNavigation/Docs/Tiled_Minimap_Tile_Material_Setup.md
+```
+
 Material phải có domain **User Interface** và hỗ trợ:
 
 | Tham số | Kiểu | Mô tả |
@@ -207,6 +213,14 @@ Material phải có domain **User Interface** và hỗ trợ:
 | `ShapeAlpha` | Scalar | `1.0` nghĩa là dùng mask tròn. |
 
 Nếu thiếu material này và `MinimapShape` là `Circle`, map vẫn hoạt động nhưng direct tile images sẽ render không có circular tile mask. Một debug warning sẽ được log một lần.
+
+Với UI material, nhớ nối alpha mask vào pin **Opacity**. Nếu chỉ nối output `float4` vào **Final Color** và để **Opacity = 1.0**, tile vẫn hiện thành hình vuông.
+
+Khuyến nghị layout cho minimap tròn:
+
+- `MapImage` và `MapMarkerCanvas` nằm trong cùng một container vuông.
+- Hai widget này có cùng anchors, alignment và size.
+- Circle mask là hình tròn nội tiếp container vuông đó.
 
 ---
 

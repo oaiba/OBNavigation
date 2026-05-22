@@ -159,6 +159,12 @@ Nếu muốn hiển thị vị trí UV của người chơi trên map texture:
 
 Các layer Panoramic dạng tiled có thể render từng tile texture riêng thay vì một atlas texture duy nhất. Minimap vuông và tactical map có thể dùng direct tile brush; tactical map sẽ preserve aspect bằng viewport runtime, không phụ thuộc vào canvas ngoài là vuông hay chữ nhật. Minimap tròn nên gán `TiledMapTileMaterial` trong `UOBMinimapConfigAsset` để từng tile áp dụng cùng mask tròn như single-texture path.
 
+Hướng dẫn đầy đủ cách tạo material tile mask tròn nằm tại:
+
+```text
+OBNavigation/Docs/Tiled_Minimap_Tile_Material_Setup.md
+```
+
 Tạo một UI material có các tham số sau:
 
 | Tham số | Kiểu | Mô tả |
@@ -169,6 +175,10 @@ Tạo một UI material có các tham số sau:
 | `ShapeAlpha` | Scalar | `1.0` để dùng hành vi mask tròn. |
 
 Nếu không gán `TiledMapTileMaterial` và `MinimapShape` là `Circle`, OBNavigation sẽ fallback sang direct tile texture và log một warning trong debug mode.
+
+Với UI material, alpha không tự có hiệu lực khi chỉ nối `float4` vào **Final Color**. Hãy tách `RGB` vào **Final Color** và `A` hoặc `FinalAlpha` vào **Opacity**.
+
+Lưu ý layout: material tile nhận `TileScreenMin` và `TileScreenMax` theo canvas normalized space. Với minimap tròn, nên đặt `MapImage` và `MapMarkerCanvas` trong một container vuông để circle mask nằm đúng tâm và đúng tỷ lệ pixel.
 
 ---
 

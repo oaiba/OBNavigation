@@ -205,6 +205,7 @@ Defines minimap rendering settings.
 - `MapRotationOffset`
 - `MapAlignment`
 - `MinimapShape`
+- `TiledMapTileMaterial`: optional UI material for circular tiled minimaps. See `Docs/Tiled_Minimap_Tile_Material_Setup.md`.
 - `bShowDebugMessages`
 
 ## UI Widgets
@@ -335,6 +336,9 @@ Ping safety is handled in `UPingComponent`:
 This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to `ExtractionCoreGame` systems such as `AExtractionHUD`, `UOverlayController_Navigation`, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
 
 - [`Navigation_Integration_Guide.md`](../ExtractionCoreGame/Source/ExtractionCoreGame/Docs/Navigation_Integration_Guide.md)
+- [`Tiled_Minimap_Setup.md`](Docs/Tiled_Minimap_Setup.md)
+- [`Minimap_Material_Setup.md`](Docs/Minimap_Material_Setup.md)
+- [`Tiled_Minimap_Tile_Material_Setup.md`](Docs/Tiled_Minimap_Tile_Material_Setup.md)
 
 Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only approved marker specs or source components to `UOBNavigationSubsystem`.
 
