@@ -19,7 +19,6 @@ class UOBMapOverlayWidget;
 class UOBMinimapConfigAsset;
 class UOBNavigationSubsystem;
 class UTextBlock;
-class UTexture2D;
 
 /**
  * Abstract base class that owns the shared map rendering pipeline: dynamic material
@@ -48,7 +47,7 @@ class UTexture2D;
  *  │  │   · ViewCenterUV → UV scroll         │          │
  *  │  │   · Zoom         → UV scale          │          │
  *  │  │   · PlayerYaw    → rotation          │          │
- *  │  │   · MapTexture   → layer texture     │          │
+ *  │  │   · MapTexture   → material texture  │          │
  *  │  │                                      │          │
  *  │  └──────────────────────────────────────┘          │
  *  │                                                    │
@@ -426,10 +425,6 @@ protected:
 
 	/** Last layer name applied to the map material. */
 	FName AppliedLayerName = NAME_None;
-
-	/** Last texture applied to the map material. */
-	UPROPERTY(Transient)
-	TObjectPtr<UTexture2D> AppliedMapTexture = nullptr;
 
 	/** Last Panoramic definition applied to either render path. */
 	UPROPERTY(Transient)

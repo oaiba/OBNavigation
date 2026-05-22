@@ -16,11 +16,12 @@ Tactical full map dùng cùng runtime map layer với minimap. Trước khi setu
 - `UOBNavigationSubsystem` đã nhận tracked pawn bằng `SetTrackedPlayerPawn`.
 - Marker configs đã được đăng ký qua `UOBNavigationMapRegistryAsset`.
 
-Tactical map hỗ trợ cả:
+Tactical map hỗ trợ các Panoramic definition sau:
 
-- legacy `MapTexture`
-- Panoramic definition chỉ có `BaseMapTexture`
-- Panoramic definition có `TileSet` để stream tiles + LOD
+- Definition chỉ có `BaseMapTexture` để render single-texture.
+- Definition có `TileSet` để stream tiles + LOD.
+
+`FOBNavigationMapLayerSpec.MapTexture` legacy đã bị xóa khỏi runtime layer. Nếu Blueprint/config cũ còn set texture-only layer, hãy đổi sang Panoramic definition.
 
 ---
 
@@ -102,7 +103,7 @@ UOBTacticalMapWidget
 
 | Tên | Kiểu | Ghi chú |
 |---|---|---|
-| `MapImage` | `Image` | Hiển thị legacy/single-texture/fallback `BaseMapTexture`. |
+| `MapImage` | `Image` | Hiển thị single-texture/fallback `BaseMapTexture` từ Panoramic definition. |
 | `MapMarkerCanvas` | `Canvas Panel` | Chứa runtime tile canvas, overlays và marker widgets. |
 
 Yêu cầu layout:
@@ -187,7 +188,8 @@ Runtime behavior:
 - `MapImage`, tiled images, overlays và markers dùng cùng aspect-preserving viewport; capture 8192x8192 sẽ luôn hiển thị thành hình vuông kể cả khi tactical canvas là hình chữ nhật.
 - Tile definition/tile set/tile textures được stream async.
 - Khi active tile images đã sẵn sàng, `MapImage` được ẩn để tiled map hiển thị.
-- Nếu layer không có `TileSet`, tactical map dùng single-texture path.
+- Nếu layer không có `TileSet` nhưng có `BaseMapTexture`, tactical map dùng single-texture path.
+- Nếu layer thiếu cả `TileSet` và `BaseMapTexture`, map bị ẩn và runtime log lỗi rõ ràng.
 
 LOD behavior:
 

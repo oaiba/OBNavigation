@@ -184,7 +184,7 @@ TacticalMapWidget->InitializeTacticalMapAndStartTracking(MinimapConfigAsset, Tac
 OBNavigation/Docs/Minimap_Material_Setup.md
 ```
 
-Các tham số runtime bắt buộc:
+Các tham số runtime bắt buộc. Tên parameter `MapTexture` vẫn được dùng trong material, nhưng runtime layer không còn property legacy `MapTexture`:
 
 - `MapTexture`
 - `ViewCenterUV`
@@ -271,7 +271,7 @@ Các trường hữu ích:
 
 ### Compatibility
 
-- [ ] Các layer `MapTexture` cũ vẫn render.
+- [ ] Các layer cũ đã được đổi sang Panoramic definition.
 - [ ] Panoramic definitions chỉ có `BaseMapTexture` vẫn render.
 - [ ] Projection marker và overlay vẫn khớp trên cả single-texture và tiled maps.
 

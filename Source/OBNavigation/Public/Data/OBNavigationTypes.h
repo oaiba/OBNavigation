@@ -170,9 +170,6 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 	FName LayerName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
-	TObjectPtr<UTexture2D> MapTexture = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
 	TSoftObjectPtr<UMinimapDefinitionDataAsset> PanoramicDefinition;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OBNavigation|Map")
@@ -196,7 +193,7 @@ struct OBNAVIGATION_API FOBNavigationMapLayerSpec
 	bool HasValidWorldBounds() const;
 	bool HasPanoramicDefinition() const;
 	bool IsTiledLayer() const;
-	bool UsesSingleTextureLayer() const;
+	bool IsSingleTexturePanoramicLayer() const;
 	bool PopulateFromPanoramicDefinition(const UMinimapDefinitionDataAsset* MinimapDefinition, FName InLayerName,
 	                                     int32 InPriority, bool bForceClampQueriesToBounds);
 	bool ContainsWorldLocationXY(const FVector& WorldLocation) const;

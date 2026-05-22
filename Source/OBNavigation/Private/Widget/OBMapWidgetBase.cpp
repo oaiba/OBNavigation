@@ -5,9 +5,11 @@
 #include "Components/TextBlock.h"
 #include "Data/OBMapMarker.h"
 #include "Data/OBMinimapConfigAsset.h"
+#include "Engine/Texture2D.h"
 #include "GameFramework/Pawn.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "MinimapDefinitionDataAsset.h"
 #include "OBNavigation.h"
 #include "OBNavigationSubsystem.h"
 #include "Widget/OBMapOverlayWidget.h"
@@ -743,7 +745,8 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 
 	const bool bHasLoadedActiveTiles = !TileManager->GetActiveTiles().IsEmpty()
 		&& ActiveTileImages.Num() >= TileManager->GetActiveTiles().Num();
-	if (MapImage && CurrentLayer.MapTexture)
+	const UMinimapDefinitionDataAsset* Definition = CurrentLayer.PanoramicDefinition.Get();
+	if (MapImage && Definition && !Definition->BaseMapTexture.IsNull())
 	{
 		MapImage->SetVisibility(bHasLoadedActiveTiles ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	}
@@ -1085,21 +1088,37 @@ void UOBMapWidgetBase::ApplyMapLayer(const FOBNavigationMapLayerSpec& NewLayerSp
 		return;
 	}
 
+	const UMinimapDefinitionDataAsset* Definition = NewLayerSpec.PanoramicDefinition.Get();
+	if (!Definition && NewLayerSpec.HasPanoramicDefinition())
+	{
+		Definition = NewLayerSpec.PanoramicDefinition.LoadSynchronous();
+	}
+
+	const bool bUseTiledLayer = Definition && Definition->IsTiledDefinition();
 	if (AppliedLayerName == NewLayerSpec.LayerName
-		&& AppliedMapTexture == NewLayerSpec.MapTexture
 		&& AppliedPanoramicDefinition == NewLayerSpec.PanoramicDefinition
-		&& bAppliedTiledLayer == NewLayerSpec.IsTiledLayer())
+		&& bAppliedTiledLayer == bUseTiledLayer)
 	{
 		return;
 	}
 
-	const bool bUseTiledLayer = NewLayerSpec.IsTiledLayer();
 	AppliedLayerName = NewLayerSpec.LayerName;
-	AppliedMapTexture = NewLayerSpec.MapTexture;
 	AppliedPanoramicDefinition = NewLayerSpec.PanoramicDefinition;
 	bAppliedTiledLayer = bUseTiledLayer;
 
 	ClearTileWidgets();
+
+	if (!Definition)
+	{
+		MapImage->SetVisibility(ESlateVisibility::Collapsed);
+		if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+		{
+			UE_LOG(LogOBNavigation, Warning,
+			       TEXT("[%s::%hs] - Applied empty map layer. PanoramicDefinition is required. Layer='%s'"),
+			       *GetName(), __FUNCTION__, *NewLayerSpec.LayerName.ToString());
+		}
+		return;
+	}
 
 	if (bUseTiledLayer)
 	{
@@ -1113,10 +1132,17 @@ void UOBMapWidgetBase::ApplyMapLayer(const FOBNavigationMapLayerSpec& NewLayerSp
 			TileManager->Initialize(NewLayerSpec, GetTileBudget());
 		}
 
-		if (NewLayerSpec.MapTexture)
+		if (!Definition->BaseMapTexture.IsNull())
 		{
-			MapMaterialInstance->SetTextureParameterValue("MapTexture", NewLayerSpec.MapTexture);
-			MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+			if (UTexture2D* BaseMapTexture = Definition->BaseMapTexture.LoadSynchronous())
+			{
+				MapMaterialInstance->SetTextureParameterValue("MapTexture", BaseMapTexture);
+				MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+			}
+			else
+			{
+				MapImage->SetVisibility(ESlateVisibility::Collapsed);
+			}
 		}
 		else
 		{
@@ -1136,27 +1162,31 @@ void UOBMapWidgetBase::ApplyMapLayer(const FOBNavigationMapLayerSpec& NewLayerSp
 		return;
 	}
 
-	if (NewLayerSpec.MapTexture)
+	if (!Definition->BaseMapTexture.IsNull())
 	{
-		MapMaterialInstance->SetTextureParameterValue("MapTexture", NewLayerSpec.MapTexture);
-		MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+		if (UTexture2D* BaseMapTexture = Definition->BaseMapTexture.LoadSynchronous())
 		{
-			UE_LOG(LogOBNavigation, Log,
-			       TEXT("[%s::%hs] - Applied map layer. Layer='%s' Texture='%s' BoundsMin=%s BoundsMax=%s MapRotation=%.2f"),
-			       *GetName(), __FUNCTION__, *NewLayerSpec.LayerName.ToString(), *GetNameSafe(NewLayerSpec.MapTexture),
-			       *NewLayerSpec.WorldBounds.Min.ToString(), *NewLayerSpec.WorldBounds.Max.ToString(),
-			       NewLayerSpec.MapRotationDegrees);
+			MapMaterialInstance->SetTextureParameterValue("MapTexture", BaseMapTexture);
+			MapImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+			if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
+			{
+				UE_LOG(LogOBNavigation, Log,
+				       TEXT("[%s::%hs] - Applied single-texture Panoramic map layer. Layer='%s' BaseMapTexture='%s' Definition='%s' BoundsMin=%s BoundsMax=%s MapRotation=%.2f"),
+				       *GetName(), __FUNCTION__, *NewLayerSpec.LayerName.ToString(), *GetNameSafe(BaseMapTexture),
+				       *NewLayerSpec.PanoramicDefinition.ToSoftObjectPath().ToString(),
+				       *NewLayerSpec.WorldBounds.Min.ToString(), *NewLayerSpec.WorldBounds.Max.ToString(),
+				       NewLayerSpec.MapRotationDegrees);
+			}
+			return;
 		}
 	}
-	else
+
+	MapImage->SetVisibility(ESlateVisibility::Collapsed);
+	if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
 	{
-		MapImage->SetVisibility(ESlateVisibility::Collapsed);
-		if (VisualConfigAsset && VisualConfigAsset->bShowDebugMessages)
-		{
-			UE_LOG(LogOBNavigation, Warning,
-			       TEXT("[%s::%hs] - Applied empty map layer. MapImage collapsed. Layer='%s'"),
-			       *GetName(), __FUNCTION__, *NewLayerSpec.LayerName.ToString());
-		}
+		UE_LOG(LogOBNavigation, Error,
+		       TEXT("[%s::%hs] - Panoramic map layer has neither TileSet nor loadable BaseMapTexture. Layer='%s' Definition='%s'"),
+		       *GetName(), __FUNCTION__, *NewLayerSpec.LayerName.ToString(),
+		       *NewLayerSpec.PanoramicDefinition.ToSoftObjectPath().ToString());
 	}
 }

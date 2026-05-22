@@ -110,12 +110,17 @@ bool FOBNavigationMapLayerSpec::IsTiledLayer() const
 		return Definition->IsTiledDefinition();
 	}
 
-	return !PanoramicDefinition.IsNull() && MapTexture == nullptr;
+	return false;
 }
 
-bool FOBNavigationMapLayerSpec::UsesSingleTextureLayer() const
+bool FOBNavigationMapLayerSpec::IsSingleTexturePanoramicLayer() const
 {
-	return MapTexture != nullptr && !IsTiledLayer();
+	if (const UMinimapDefinitionDataAsset* Definition = PanoramicDefinition.Get())
+	{
+		return !Definition->BaseMapTexture.IsNull() && !Definition->IsTiledDefinition();
+	}
+
+	return false;
 }
 
 bool FOBNavigationMapLayerSpec::PopulateFromPanoramicDefinition(const UMinimapDefinitionDataAsset* MinimapDefinition,
@@ -137,7 +142,6 @@ bool FOBNavigationMapLayerSpec::PopulateFromPanoramicDefinition(const UMinimapDe
 
 	LayerName = InLayerName.IsNone() ? MinimapDefinition->GetFName() : InLayerName;
 	PanoramicDefinition = TSoftObjectPtr<UMinimapDefinitionDataAsset>(const_cast<UMinimapDefinitionDataAsset*>(MinimapDefinition));
-	MapTexture = MinimapDefinition->BaseMapTexture.IsNull() ? nullptr : MinimapDefinition->BaseMapTexture.LoadSynchronous();
 	WorldBounds = MinimapDefinition->WorldBounds;
 	OutputSize = MinimapDefinition->OutputSize;
 	Priority = InPriority;
@@ -150,7 +154,7 @@ bool FOBNavigationMapLayerSpec::PopulateFromPanoramicDefinition(const UMinimapDe
 		OverlayLayers.Add(ConvertPanoramicOverlayLayer(OverlayLayer));
 	}
 
-	return MapTexture != nullptr || MinimapDefinition->IsTiledDefinition() || !MinimapDefinition->TileSet.IsNull();
+	return MinimapDefinition->IsTiledDefinition() || !MinimapDefinition->BaseMapTexture.IsNull();
 }
 
 bool FOBNavigationMapLayerSpec::ContainsWorldLocationXY(const FVector& WorldLocation) const
@@ -179,21 +183,7 @@ bool FOBNavigationMapLayerSpec::ProjectWorldToMapUVChecked(const FVector& WorldL
 		return false;
 	}
 
-	const FVector BoundsMin = WorldBounds.Min;
-	const FVector BoundsSize = WorldBounds.GetSize();
-
-	if (HasPanoramicDefinition())
-	{
-		OutMapUV = ProjectWorldToPanoramicMapUV(WorldBounds, MapRotationDegrees, WorldLocation);
-	}
-	else
-	{
-		OutMapUV = FVector2D(
-			(WorldLocation.X - BoundsMin.X) / BoundsSize.X,
-			1.0f - ((WorldLocation.Y - BoundsMin.Y) / BoundsSize.Y));
-
-		OutMapUV = ApplyMapRotation(OutMapUV, MapRotationDegrees);
-	}
+	OutMapUV = ProjectWorldToPanoramicMapUV(WorldBounds, MapRotationDegrees, WorldLocation);
 
 	if (bClampQueriesToBounds)
 	{

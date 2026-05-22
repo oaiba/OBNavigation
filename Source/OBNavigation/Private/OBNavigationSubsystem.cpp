@@ -71,7 +71,7 @@ namespace
 		{
 			const FOBNavigationMapLayerSpec& LayerSpec = LayerSpecs[LayerIndex];
 			CandidateDescriptions.Add(FString::Printf(
-				TEXT("#%d Name='%s' Priority=%d ValidBounds=%s InsideXY=%s Clamp=%s CanProject=%s BoundsMin=%s BoundsMax=%s Texture='%s' Panoramic='%s' Tiled=%s"),
+				TEXT("#%d Name='%s' Priority=%d ValidBounds=%s InsideXY=%s Clamp=%s CanProject=%s BoundsMin=%s BoundsMax=%s Panoramic='%s' Tiled=%s"),
 				LayerIndex,
 				*LayerSpec.LayerName.ToString(),
 				LayerSpec.Priority,
@@ -81,7 +81,6 @@ namespace
 				LayerSpec.CanProjectWorldLocation(WorldLocation) ? TEXT("true") : TEXT("false"),
 				*LayerSpec.WorldBounds.Min.ToCompactString(),
 				*LayerSpec.WorldBounds.Max.ToCompactString(),
-				*GetNameSafe(LayerSpec.MapTexture),
 				*LayerSpec.PanoramicDefinition.ToSoftObjectPath().ToString(),
 				LayerSpec.IsTiledLayer() ? TEXT("true") : TEXT("false")));
 		}
@@ -233,13 +232,26 @@ void UOBNavigationSubsystem::SetRuntimeMapLayers(const TArray<FOBNavigationMapLa
 	RuntimeMapLayerSpecs.Reset();
 	for (FOBNavigationMapLayerSpec LayerSpec : InMapLayers)
 	{
+		if (!LayerSpec.HasPanoramicDefinition())
+		{
+			UE_LOG(LogOBNavigation, Warning,
+			       TEXT("[%s::%hs] - Skipping map layer '%s': PanoramicDefinition is required."),
+			       *GetName(), __FUNCTION__, *LayerSpec.LayerName.ToString());
+			continue;
+		}
+
+		if (!LayerSpec.HasValidWorldBounds())
+		{
+			UE_LOG(LogOBNavigation, Warning,
+			       TEXT("[%s::%hs] - Skipping map layer '%s': valid WorldBounds are required. Definition='%s'"),
+			       *GetName(), __FUNCTION__, *LayerSpec.LayerName.ToString(),
+			       *LayerSpec.PanoramicDefinition.ToSoftObjectPath().ToString());
+			continue;
+		}
+
 		if (LayerSpec.LayerName.IsNone())
 		{
-			if (LayerSpec.MapTexture)
-			{
-				LayerSpec.LayerName = LayerSpec.MapTexture->GetFName();
-			}
-			else if (!LayerSpec.PanoramicDefinition.IsNull())
+			if (!LayerSpec.PanoramicDefinition.IsNull())
 			{
 				LayerSpec.LayerName = FName(*LayerSpec.PanoramicDefinition.GetAssetName());
 			}
@@ -715,10 +727,10 @@ bool UOBNavigationSubsystem::IsDifferentCurrentLayer(const FOBNavigationMapLayer
 	}
 
 	return CurrentMapLayerSpec.LayerName != NewLayerSpec->LayerName
-		|| CurrentMapLayerSpec.MapTexture != NewLayerSpec->MapTexture
 		|| CurrentMapLayerSpec.PanoramicDefinition != NewLayerSpec->PanoramicDefinition
 		|| CurrentMapLayerSpec.WorldBounds.Min != NewLayerSpec->WorldBounds.Min
 		|| CurrentMapLayerSpec.WorldBounds.Max != NewLayerSpec->WorldBounds.Max
 		|| CurrentMapLayerSpec.Priority != NewLayerSpec->Priority
+		|| CurrentMapLayerSpec.bClampQueriesToBounds != NewLayerSpec->bClampQueriesToBounds
 		|| !FMath::IsNearlyEqual(CurrentMapLayerSpec.MapRotationDegrees, NewLayerSpec->MapRotationDegrees);
 }
