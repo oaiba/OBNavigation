@@ -58,6 +58,17 @@ enum class EOBMapProjectionResult : uint8
 	InvalidBounds
 };
 
+/** Shape used when projected points are clamped to the visible map viewport. */
+UENUM(BlueprintType)
+enum class EOBMapViewportClampShape : uint8
+{
+	/** Clamp to the rectangular viewport bounds. */
+	Rect,
+
+	/** Clamp to the circle inscribed in the viewport. */
+	Circle
+};
+
 /**
  * Runtime view state used to project map UV coordinates into a widget canvas.
  */
@@ -68,6 +79,9 @@ struct OBNAVIGATION_API FOBNavigationMapViewContext
 
 	/** Zoom multiplier where larger values show a smaller world area. */
 	float Zoom = 1.0f;
+
+	/** UV span represented by a square unit of viewport space before zoom is applied. */
+	FVector2D ViewUVScale = FVector2D(1.0f, 1.0f);
 
 	/** Static rotation from map metadata and widget alignment settings, in degrees. */
 	float TotalStaticRotation = 0.0f;
@@ -80,6 +94,12 @@ struct OBNAVIGATION_API FOBNavigationMapViewContext
 
 	/** Whether projected points outside the viewport should clamp to the edge. */
 	bool bClampToCanvas = true;
+
+	/** Visible viewport shape used by edge-clamped markers. */
+	EOBMapViewportClampShape ClampShape = EOBMapViewportClampShape::Rect;
+
+	/** Surface that owns this view context. */
+	EOBNavigationSurface Surface = EOBNavigationSurface::FullMap;
 
 	/** Returns the signed rotation applied to projected map pixels. */
 	float GetAppliedRotationDegrees() const;
@@ -151,6 +171,18 @@ namespace OBNavigation::MapView
 	OBNAVIGATION_API bool ProjectUVToCanvas(const FVector2D& MapUV, const FOBNavigationMapViewport& MapViewport,
 	                                        const FOBNavigationMapViewContext& ViewContext,
 	                                        FOBNavigationCanvasProjection& OutProjection);
+
+	/**
+	 * Calculates the surface-specific viewport for a map layer inside a canvas.
+	 *
+	 * @param CanvasSize Raw canvas size in Slate units.
+	 * @param LayerSpec Layer metadata used to derive the map aspect ratio.
+	 * @param Surface Surface policy to apply. Minimap is always square; FullMap preserves layer aspect.
+	 * @return Centered fitted viewport for map rendering and projection.
+	 */
+	OBNAVIGATION_API FOBNavigationMapViewport CalculateMapViewport(const FVector2D& CanvasSize,
+	                                                               const FOBNavigationMapLayerSpec& LayerSpec,
+	                                                               EOBNavigationSurface Surface);
 }
 
 /** Runtime overlay primitive type painted over map imagery. */

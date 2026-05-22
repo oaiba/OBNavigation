@@ -42,7 +42,10 @@ int32 UOBMapOverlayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 		return MaxLayer;
 	}
 
-	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, LayerSpec);
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(
+		CanvasSize,
+		LayerSpec,
+		ViewContext.Surface);
 	if (!MapViewport.IsValid())
 	{
 		return MaxLayer;

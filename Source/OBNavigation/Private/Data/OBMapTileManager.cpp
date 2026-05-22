@@ -5,6 +5,16 @@
 #include "MinimapBlueprintLibrary.h"
 #include "OBNavigation.h"
 
+namespace
+{
+FVector2D GetSafeTileViewUVScale(const FVector2D& ViewUVScale)
+{
+	return FVector2D(
+		FMath::Max(FMath::Abs(ViewUVScale.X), KINDA_SMALL_NUMBER),
+		FMath::Max(FMath::Abs(ViewUVScale.Y), KINDA_SMALL_NUMBER));
+}
+}
+
 void UOBMapTileManager::Initialize(const FOBNavigationMapLayerSpec& InLayerSpec, const int32 InTileBudget)
 {
 	Shutdown();
@@ -241,7 +251,8 @@ bool UOBMapTileManager::BuildVisibleUVRect(const FOBNavigationMapViewContext& Vi
 	}
 
 	const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-	const FVector2D HalfUVExtent(0.5f / SafeZoom, 0.5f / SafeZoom);
+	const FVector2D SafeViewUVScale = GetSafeTileViewUVScale(ViewContext.ViewUVScale);
+	const FVector2D HalfUVExtent(0.5f * SafeViewUVScale.X / SafeZoom, 0.5f * SafeViewUVScale.Y / SafeZoom);
 	const float InverseRotationDegrees = -ViewContext.GetAppliedRotationDegrees();
 
 	TArray<FVector2D, TInlineAllocator<4>> Corners;
@@ -317,7 +328,10 @@ float UOBMapTileManager::CalculateWorldUnitsPerPixel(const FOBNavigationMapViewC
 	}
 
 	const FVector2D ProjectionWorldSize = LayerSpec.GetProjectionWorldSize();
-	const float LargerWorldAxis = FMath::Max(ProjectionWorldSize.X, ProjectionWorldSize.Y);
+	const FVector2D SafeViewUVScale = GetSafeTileViewUVScale(ViewContext.ViewUVScale);
+	const float LargerWorldAxis = FMath::Max(
+		ProjectionWorldSize.X * SafeViewUVScale.X,
+		ProjectionWorldSize.Y * SafeViewUVScale.Y);
 	const float LargerCanvasAxis = FMath::Max(CanvasSize.X, CanvasSize.Y);
 	return LargerWorldAxis / (LargerCanvasAxis * FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER));
 }

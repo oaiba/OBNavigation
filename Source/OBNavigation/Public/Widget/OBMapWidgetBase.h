@@ -198,6 +198,9 @@ protected:
 	 */
 	virtual bool ShouldRotateMap() const;
 
+	/** Returns the shape used when projected markers clamp to the visible viewport edge. */
+	virtual EOBMapViewportClampShape GetViewportClampShape() const;
+
 	/**
 	 * Returns true when the player's own marker should be pinned to the canvas center.
 	 * 

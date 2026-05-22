@@ -107,42 +107,9 @@ void UOBTacticalMapWidget::SetTacticalMapZoom(const float NewZoom)
 	RefreshTacticalControlState();
 }
 
-void UOBTacticalMapWidget::AddPanInput(const FVector2D PanDelta)
+void UOBTacticalMapWidget::AddPanInput(const FVector2D)
 {
-	UCanvasPanel* MarkerCanvas = GetMarkerCanvas();
-	if (PanDelta.IsNearlyZero() || !MarkerCanvas)
-	{
-		return;
-	}
-
-	const FVector2D CanvasSize = MarkerCanvas->GetCachedGeometry().GetLocalSize();
-	if (CanvasSize.X <= 0.0f || CanvasSize.Y <= 0.0f)
-	{
-		return;
-	}
-
-	FOBNavigationMapLayerSpec CurrentLayer;
-	if (!ResolveActiveLayer(CurrentLayer))
-	{
-		return;
-	}
-
-	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
-	if (!MapViewport.IsValid())
-	{
-		return;
-	}
-
-	const float AppliedRotation = -GetTotalStaticRotation();
-	const FVector2D UnrotatedPanDelta = PanDelta.GetRotated(-AppliedRotation);
-	const float SafeZoom = FMath::Max(GetMapZoom(), KINDA_SMALL_NUMBER);
-
-	// Convert screen-space panning into UV distance; zoomed-in views move less per pixel.
-	const FVector2D UVDelta(
-		UnrotatedPanDelta.X / (MapViewport.Size.X * SafeZoom),
-		UnrotatedPanDelta.Y / (MapViewport.Size.Y * SafeZoom));
-
-	SetViewCenterUVInternal(ViewCenterUV - UVDelta, false);
+	SetViewCenterUVInternal(FVector2D(0.5f, 0.5f), false);
 }
 
 void UOBTacticalMapWidget::SetPanInput(const FVector2D InPanInput)
@@ -402,19 +369,7 @@ FName UOBTacticalMapWidget::GetOverlayTagFilter() const
 bool UOBTacticalMapWidget::ResolveViewCenterUV(const FOBNavigationMapLayerSpec& CurrentLayer,
                                                const APawn* TrackedPawn, FVector2D& OutViewCenterUV) const
 {
-	if (bIsFollowingTrackedPlayer && NavSubsystem && TrackedPawn)
-	{
-		FVector2D PlayerUV;
-		EOBMapProjectionResult ProjectionResult = EOBMapProjectionResult::NoLayer;
-		if (NavSubsystem->WorldToMapUVChecked(CurrentLayer, OBNavigation::ResolveActorNavigationLocation(TrackedPawn), PlayerUV,
-			                                      ProjectionResult))
-		{
-			OutViewCenterUV = PlayerUV;
-			return true;
-		}
-	}
-
-	OutViewCenterUV = ViewCenterUV;
+	OutViewCenterUV = FVector2D(0.5f, 0.5f);
 	return true;
 }
 
@@ -433,35 +388,23 @@ void UOBTacticalMapWidget::OnViewContextUpdated(const FOBNavigationMapViewContex
                                                 const FOBNavigationMapLayerSpec& CurrentLayer,
                                                 const APawn* TrackedPawn)
 {
-	if (bIsFollowingTrackedPlayer && !ViewCenterUV.Equals(ViewContext.ViewCenterUV, KINDA_SMALL_NUMBER))
+	if (!ViewCenterUV.Equals(FVector2D(0.5f, 0.5f), KINDA_SMALL_NUMBER))
 	{
-		ViewCenterUV = ViewContext.ViewCenterUV;
+		ViewCenterUV = FVector2D(0.5f, 0.5f);
 		BroadcastViewChanged();
-		RefreshTacticalControlState();
 	}
-	else
-	{
-		RefreshTileDebugState();
-	}
+
+	RefreshTileDebugState();
 }
 
-void UOBTacticalMapWidget::ApplyContinuousPanInput(const float DeltaTime)
+void UOBTacticalMapWidget::ApplyContinuousPanInput(const float)
 {
-	if (!bIsInitializedAndTracking || !ShouldUpdateMapThisFrame() || !TacticalConfigAsset || PanInput.IsNearlyZero())
-	{
-		return;
-	}
-
-	AddPanInput(PanInput * TacticalConfigAsset->PanSpeed * DeltaTime);
 }
 
 void UOBTacticalMapWidget::SetViewCenterUVInternal(const FVector2D MapUV, const bool bFollowTrackedPlayer)
 {
-	const bool bShouldClamp = !TacticalConfigAsset || TacticalConfigAsset->bClampViewToMapBounds;
-	ViewCenterUV = bShouldClamp
-			       ? FVector2D(FMath::Clamp(MapUV.X, 0.0f, 1.0f), FMath::Clamp(MapUV.Y, 0.0f, 1.0f))
-			       : MapUV;
-	bIsFollowingTrackedPlayer = bFollowTrackedPlayer;
+	ViewCenterUV = FVector2D(0.5f, 0.5f);
+	bIsFollowingTrackedPlayer = false;
 	BroadcastViewChanged();
 	RefreshTacticalControlState();
 }

@@ -74,6 +74,13 @@ bool UOBMinimapWidget::ShouldRotateMap() const
 	return ConfigAsset && ConfigAsset->bShouldRotateMap;
 }
 
+EOBMapViewportClampShape UOBMinimapWidget::GetViewportClampShape() const
+{
+	return CurrentMinimapShape == EMinimapShape::Circle
+		       ? EOBMapViewportClampShape::Circle
+		       : EOBMapViewportClampShape::Rect;
+}
+
 bool UOBMinimapWidget::ShouldMaskTiledMapTiles() const
 {
 	return CurrentMinimapShape == EMinimapShape::Circle;

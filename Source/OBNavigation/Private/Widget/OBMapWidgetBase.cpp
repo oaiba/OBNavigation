@@ -14,6 +14,22 @@
 #include "OBNavigationSubsystem.h"
 #include "Widget/OBMapOverlayWidget.h"
 
+namespace
+{
+FVector2D GetSafeViewUVScale(const FVector2D& ViewUVScale)
+{
+	return FVector2D(
+		FMath::Max(FMath::Abs(ViewUVScale.X), KINDA_SMALL_NUMBER),
+		FMath::Max(FMath::Abs(ViewUVScale.Y), KINDA_SMALL_NUMBER));
+}
+
+FVector2D DivideByViewUVScale(const FVector2D& Value, const FVector2D& ViewUVScale)
+{
+	const FVector2D SafeScale = GetSafeViewUVScale(ViewUVScale);
+	return FVector2D(Value.X / SafeScale.X, Value.Y / SafeScale.Y);
+}
+}
+
 FOBMapTileRuntimeStats UOBMapWidgetBase::GetTileRuntimeStats() const
 {
 	return TileManager ? TileManager->GetRuntimeStats() : FOBMapTileRuntimeStats();
@@ -210,7 +226,8 @@ void UOBMapWidgetBase::NativeTick(const FGeometry& MyGeometry, const float InDel
 		{
 			const FOBNavigationMapViewport DebugViewport = OBNavigation::MapView::CalculateMapViewport(
 				MarkerCanvas->GetCachedGeometry().GetLocalSize(),
-				CurrentLayer);
+				CurrentLayer,
+				GetNavigationSurface());
 			GEngine->AddOnScreenDebugMessage(
 				-1, 0.0f, FColor::Yellow,
 				FString::Printf(TEXT("Map Viewport: Origin=%s Size=%s"),
@@ -275,6 +292,11 @@ bool UOBMapWidgetBase::ShouldRotateMap() const
 	return false;
 }
 
+EOBMapViewportClampShape UOBMapWidgetBase::GetViewportClampShape() const
+{
+	return EOBMapViewportClampShape::Rect;
+}
+
 bool UOBMapWidgetBase::ShouldCenterPlayerMarker() const
 {
 	return false;
@@ -325,10 +347,23 @@ FOBNavigationMapViewContext UOBMapWidgetBase::BuildViewContext(const FOBNavigati
 	FOBNavigationMapViewContext ViewContext;
 	ViewContext.ViewCenterUV = ViewCenterUV;
 	ViewContext.Zoom = CurrentZoom;
+	if (GetNavigationSurface() == EOBNavigationSurface::Minimap)
+	{
+		const FVector2D ProjectionWorldSize = CurrentLayer.GetProjectionWorldSize();
+		if (ProjectionWorldSize.X > 0.0f && ProjectionWorldSize.Y > 0.0f)
+		{
+			const float ShortWorldAxis = FMath::Min(ProjectionWorldSize.X, ProjectionWorldSize.Y);
+			ViewContext.ViewUVScale = FVector2D(
+				ShortWorldAxis / ProjectionWorldSize.X,
+				ShortWorldAxis / ProjectionWorldSize.Y);
+		}
+	}
 	ViewContext.TotalStaticRotation = GetTotalStaticRotation();
 	ViewContext.DynamicMapYaw = GetDynamicMapYaw(TrackedPawn);
 	ViewContext.bShouldRotateMap = ShouldRotateMap();
 	ViewContext.bClampToCanvas = true;
+	ViewContext.ClampShape = GetViewportClampShape();
+	ViewContext.Surface = GetNavigationSurface();
 	return ViewContext;
 }
 
@@ -398,6 +433,9 @@ void UOBMapWidgetBase::UpdateMapMaterial(const FOBNavigationMapViewContext& View
 	// Zoom multiplier.
 	MapMaterialInstance->SetScalarParameterValue(TEXT("ZoomAmount"), CurrentZoom);
 
+	const FLinearColor ViewUVScaleColor(ViewContext.ViewUVScale.X, ViewContext.ViewUVScale.Y, 0.0f, 0.0f);
+	MapMaterialInstance->SetVectorParameterValue(TEXT("ViewUVScale"), ViewUVScaleColor);
+
 	// Static rotation offset (alignment + custom offset) in radians.
 	MapMaterialInstance->SetScalarParameterValue(TEXT("MapRotationOffsetRad"), FMath::DegreesToRadians(ViewContext.TotalStaticRotation));
 }
@@ -416,7 +454,10 @@ void UOBMapWidgetBase::UpdateMapImageViewport(const FOBNavigationMapLayerSpec& C
 	}
 
 	const FVector2D CanvasSize = MarkerCanvas->GetCachedGeometry().GetLocalSize();
-	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(
+		CanvasSize,
+		CurrentLayer,
+		GetNavigationSurface());
 	if (!MapViewport.IsValid())
 	{
 		return;
@@ -458,7 +499,10 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 		return;
 	}
 
-	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(
+		CanvasSize,
+		CurrentLayer,
+		GetNavigationSurface());
 	if (!MapViewport.IsValid())
 	{
 		return;
@@ -581,7 +625,10 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 		}
 
 		const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-		const FVector2D TileSize(TileUVExtent.X * MapViewport.Size.X * SafeZoom, TileUVExtent.Y * MapViewport.Size.Y * SafeZoom);
+		const FVector2D ScaledTileUVExtent = DivideByViewUVScale(TileUVExtent, ViewContext.ViewUVScale);
+		const FVector2D TileSize(
+			ScaledTileUVExtent.X * MapViewport.Size.X * SafeZoom,
+			ScaledTileUVExtent.Y * MapViewport.Size.Y * SafeZoom);
 		const FVector2D TileTopLeft = Projection.CanvasPosition - TileSize * 0.5f;
 
 		TileImage->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -806,7 +853,10 @@ void UOBMapWidgetBase::UpdateMapMarkers(const APawn* TrackedPawn, const FOBNavig
 		return;
 	}
 
-	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(CanvasSize, CurrentLayer);
+	const FOBNavigationMapViewport MapViewport = OBNavigation::MapView::CalculateMapViewport(
+		CanvasSize,
+		CurrentLayer,
+		GetNavigationSurface());
 	if (!MapViewport.IsValid())
 	{
 		return;

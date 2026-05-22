@@ -112,6 +112,9 @@ protected:
 	 */
 	virtual bool ShouldRotateMap() const override;
 
+	/** Returns the minimap shape used by clamped edge indicators. */
+	virtual EOBMapViewportClampShape GetViewportClampShape() const override;
+
 	/** Returns true when tiled map images should use the minimap shape mask. */
 	virtual bool ShouldMaskTiledMapTiles() const override;
 

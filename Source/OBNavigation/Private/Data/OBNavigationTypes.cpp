@@ -14,6 +14,19 @@ bool HasUsableProjectionSize(const FVector2D& ProjectionWorldSize)
 	return ProjectionWorldSize.X > 0.0f && ProjectionWorldSize.Y > 0.0f;
 }
 
+FVector2D GetSafeViewUVScale(const FVector2D& ViewUVScale)
+{
+	return FVector2D(
+		FMath::Max(FMath::Abs(ViewUVScale.X), KINDA_SMALL_NUMBER),
+		FMath::Max(FMath::Abs(ViewUVScale.Y), KINDA_SMALL_NUMBER));
+}
+
+FVector2D DivideByViewUVScale(const FVector2D& Value, const FVector2D& ViewUVScale)
+{
+	const FVector2D SafeScale = GetSafeViewUVScale(ViewUVScale);
+	return FVector2D(Value.X / SafeScale.X, Value.Y / SafeScale.Y);
+}
+
 FVector2D CalculateProjectionWorldSize(const FBox& WorldBounds, const FIntPoint& OutputSize)
 {
 	const FVector WorldSize = WorldBounds.GetSize();
@@ -270,6 +283,13 @@ float FOBNavigationMapViewContext::GetAppliedRotationDegrees() const
 FOBNavigationMapViewport OBNavigation::MapView::CalculateMapViewport(const FVector2D& CanvasSize,
                                                                       const FOBNavigationMapLayerSpec& LayerSpec)
 {
+	return CalculateMapViewport(CanvasSize, LayerSpec, EOBNavigationSurface::FullMap);
+}
+
+FOBNavigationMapViewport OBNavigation::MapView::CalculateMapViewport(const FVector2D& CanvasSize,
+                                                                      const FOBNavigationMapLayerSpec& LayerSpec,
+                                                                      const EOBNavigationSurface Surface)
+{
 	FOBNavigationMapViewport Viewport;
 	Viewport.RawCanvasSize = CanvasSize;
 	if (CanvasSize.X <= 0.0f || CanvasSize.Y <= 0.0f)
@@ -278,7 +298,11 @@ FOBNavigationMapViewport OBNavigation::MapView::CalculateMapViewport(const FVect
 	}
 
 	float DesiredAspectRatio = 1.0f;
-	if (LayerSpec.OutputSize.X > 0 && LayerSpec.OutputSize.Y > 0)
+	if (Surface == EOBNavigationSurface::Minimap)
+	{
+		DesiredAspectRatio = 1.0f;
+	}
+	else if (LayerSpec.OutputSize.X > 0 && LayerSpec.OutputSize.Y > 0)
 	{
 		DesiredAspectRatio = static_cast<float>(LayerSpec.OutputSize.X) / static_cast<float>(LayerSpec.OutputSize.Y);
 	}
@@ -338,18 +362,46 @@ bool OBNavigation::MapView::ProjectUVToCanvas(const FVector2D& MapUV,
 
 	const FVector2D CanvasCenter = MapViewport.GetCenter();
 	const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-	const FVector2D PixelOffset = (MapUV - ViewContext.ViewCenterUV) * MapViewport.Size * SafeZoom;
+	const FVector2D ScaledUVOffset = DivideByViewUVScale(MapUV - ViewContext.ViewCenterUV, ViewContext.ViewUVScale);
+	const FVector2D PixelOffset = ScaledUVOffset * MapViewport.Size * SafeZoom;
 	const FVector2D RotatedPixelOffset = PixelOffset.GetRotated(ViewContext.GetAppliedRotationDegrees());
 
 	OutProjection.RotatedPixelOffset = RotatedPixelOffset;
 	OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset;
 	OutProjection.bIsClampedToEdge = false;
 
-	const float MapRadius = FMath::Min(MapViewport.Size.X, MapViewport.Size.Y) * 0.5f;
-	if (ViewContext.bClampToCanvas && MapRadius > 0.0f && RotatedPixelOffset.SizeSquared() > FMath::Square(MapRadius))
+	if (ViewContext.bClampToCanvas)
 	{
-		OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset.GetSafeNormal() * MapRadius;
-		OutProjection.bIsClampedToEdge = true;
+		if (ViewContext.ClampShape == EOBMapViewportClampShape::Circle)
+		{
+			const float MapRadius = FMath::Min(MapViewport.Size.X, MapViewport.Size.Y) * 0.5f;
+			if (MapRadius > 0.0f && RotatedPixelOffset.SizeSquared() > FMath::Square(MapRadius))
+			{
+				OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset.GetSafeNormal() * MapRadius;
+				OutProjection.bIsClampedToEdge = true;
+			}
+		}
+		else
+		{
+			const FVector2D HalfSize = MapViewport.Size * 0.5f;
+			const float AbsX = FMath::Abs(RotatedPixelOffset.X);
+			const float AbsY = FMath::Abs(RotatedPixelOffset.Y);
+			if ((AbsX > HalfSize.X || AbsY > HalfSize.Y) && (AbsX > 0.0f || AbsY > 0.0f))
+			{
+				float ScaleToEdge = TNumericLimits<float>::Max();
+				if (AbsX > KINDA_SMALL_NUMBER)
+				{
+					ScaleToEdge = FMath::Min(ScaleToEdge, HalfSize.X / AbsX);
+				}
+				if (AbsY > KINDA_SMALL_NUMBER)
+				{
+					ScaleToEdge = FMath::Min(ScaleToEdge, HalfSize.Y / AbsY);
+				}
+
+				OutProjection.CanvasPosition = CanvasCenter + RotatedPixelOffset * FMath::Clamp(ScaleToEdge, 0.0f, 1.0f);
+				OutProjection.bIsClampedToEdge = true;
+			}
+		}
 	}
 
 	return true;
