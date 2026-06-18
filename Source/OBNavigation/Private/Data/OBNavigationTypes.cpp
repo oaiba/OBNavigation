@@ -14,16 +14,16 @@ bool HasUsableProjectionSize(const FVector2D& ProjectionWorldSize)
 	return ProjectionWorldSize.X > 0.0f && ProjectionWorldSize.Y > 0.0f;
 }
 
-FVector2D GetSafeViewUVScale(const FVector2D& ViewUVScale)
+FVector2D GetSafeNavigationTypesViewUVScale(const FVector2D& ViewUVScale)
 {
 	return FVector2D(
 		FMath::Max(FMath::Abs(ViewUVScale.X), KINDA_SMALL_NUMBER),
 		FMath::Max(FMath::Abs(ViewUVScale.Y), KINDA_SMALL_NUMBER));
 }
 
-FVector2D DivideByViewUVScale(const FVector2D& Value, const FVector2D& ViewUVScale)
+FVector2D DivideByNavigationTypesViewUVScale(const FVector2D& Value, const FVector2D& ViewUVScale)
 {
-	const FVector2D SafeScale = GetSafeViewUVScale(ViewUVScale);
+	const FVector2D SafeScale = GetSafeNavigationTypesViewUVScale(ViewUVScale);
 	return FVector2D(Value.X / SafeScale.X, Value.Y / SafeScale.Y);
 }
 
@@ -362,7 +362,7 @@ bool OBNavigation::MapView::ProjectUVToCanvas(const FVector2D& MapUV,
 
 	const FVector2D CanvasCenter = MapViewport.GetCenter();
 	const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-	const FVector2D ScaledUVOffset = DivideByViewUVScale(MapUV - ViewContext.ViewCenterUV, ViewContext.ViewUVScale);
+	const FVector2D ScaledUVOffset = DivideByNavigationTypesViewUVScale(MapUV - ViewContext.ViewCenterUV, ViewContext.ViewUVScale);
 	const FVector2D PixelOffset = ScaledUVOffset * MapViewport.Size * SafeZoom;
 	const FVector2D RotatedPixelOffset = PixelOffset.GetRotated(ViewContext.GetAppliedRotationDegrees());
 

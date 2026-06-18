@@ -16,16 +16,16 @@
 
 namespace
 {
-FVector2D GetSafeViewUVScale(const FVector2D& ViewUVScale)
+FVector2D GetSafeMapWidgetViewUVScale(const FVector2D& ViewUVScale)
 {
 	return FVector2D(
 		FMath::Max(FMath::Abs(ViewUVScale.X), KINDA_SMALL_NUMBER),
 		FMath::Max(FMath::Abs(ViewUVScale.Y), KINDA_SMALL_NUMBER));
 }
 
-FVector2D DivideByViewUVScale(const FVector2D& Value, const FVector2D& ViewUVScale)
+FVector2D DivideByMapWidgetViewUVScale(const FVector2D& Value, const FVector2D& ViewUVScale)
 {
-	const FVector2D SafeScale = GetSafeViewUVScale(ViewUVScale);
+	const FVector2D SafeScale = GetSafeMapWidgetViewUVScale(ViewUVScale);
 	return FVector2D(Value.X / SafeScale.X, Value.Y / SafeScale.Y);
 }
 }
@@ -625,7 +625,7 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 		}
 
 		const float SafeZoom = FMath::Max(ViewContext.Zoom, KINDA_SMALL_NUMBER);
-		const FVector2D ScaledTileUVExtent = DivideByViewUVScale(TileUVExtent, ViewContext.ViewUVScale);
+		const FVector2D ScaledTileUVExtent = DivideByMapWidgetViewUVScale(TileUVExtent, ViewContext.ViewUVScale);
 		const FVector2D TileSize(
 			ScaledTileUVExtent.X * MapViewport.Size.X * SafeZoom,
 			ScaledTileUVExtent.Y * MapViewport.Size.Y * SafeZoom);
