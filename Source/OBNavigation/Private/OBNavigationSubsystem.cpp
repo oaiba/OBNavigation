@@ -8,6 +8,8 @@
 #include "Data/OBNavigationMapRegistryAsset.h"
 #include "Camera/PlayerCameraManager.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "GameFramework/PlayerController.h"
 
 namespace
@@ -119,6 +121,7 @@ void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 
 	LoadRegistryData();
+	LoadConfiguredRuntimeMapLayers();
 
 	// Register our custom tick function
 	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(
@@ -127,6 +130,7 @@ void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UOBNavigationSubsystem::Deinitialize()
 {
+	RuntimeMapLayersHandle.Reset();
 	// Unregister the tick function
 	FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
 	Super::Deinitialize();
@@ -145,24 +149,87 @@ void UOBNavigationSubsystem::LoadRegistryData()
 	DebugMapLayerBoundsZOffset = Settings ? Settings->DebugMapLayerBoundsZOffset : 10.0f;
 
 	UOBNavigationMapRegistryAsset* Registry = Settings ? Settings->DefaultMapRegistry.LoadSynchronous() : nullptr;
-	if (!Registry)
+	if (Registry)
+	{
+		for (const FOBNavigationMarkerConfigEntry& Entry : Registry->MarkerConfigs)
+		{
+			if (Entry.MarkerType.IsValid() && Entry.Config)
+			{
+				MarkerConfigsByTag.Add(Entry.MarkerType, Entry.Config);
+			}
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Loaded %d marker configs from registry '%s'."),
+		       *GetName(), __FUNCTION__, MarkerConfigsByTag.Num(), *Registry->GetName());
+	}
+	else
 	{
 		UE_LOG(LogTemp, Warning,
 		       TEXT("[%s::%hs] - No DefaultMapRegistry configured. OBNavigation will run, but marker tag lookup must be provided at runtime."),
 		       *GetName(), __FUNCTION__);
-		return;
 	}
+}
 
-	for (const FOBNavigationMarkerConfigEntry& Entry : Registry->MarkerConfigs)
+void UOBNavigationSubsystem::LoadConfiguredRuntimeMapLayers()
+{
+	const UOBNavigationDeveloperSettings* Settings = GetDefault<UOBNavigationDeveloperSettings>();
+	TArray<FSoftObjectPath> Paths;
+	if (Settings)
 	{
-		if (Entry.MarkerType.IsValid() && Entry.Config)
+		for (const FOBNavigationPanoramicMapLayer& Layer : Settings->PanoramicMapLayers)
 		{
-			MarkerConfigsByTag.Add(Entry.MarkerType, Entry.Config);
+			if (Layer.bEnabled && !Layer.MinimapDefinition.IsNull())
+			{
+				Paths.AddUnique(Layer.MinimapDefinition.ToSoftObjectPath());
+			}
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[%s::%hs] - Loaded %d marker configs from registry '%s'."),
-	       *GetName(), __FUNCTION__, MarkerConfigsByTag.Num(), *Registry->GetName());
+	if (Paths.IsEmpty())
+	{
+		ClearRuntimeMapLayers();
+		return;
+	}
+
+	RuntimeMapLayersHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		Paths,
+		FStreamableDelegate::CreateUObject(this, &ThisClass::HandleConfiguredRuntimeMapLayersLoaded),
+		FStreamableManager::AsyncLoadHighPriority);
+}
+
+void UOBNavigationSubsystem::HandleConfiguredRuntimeMapLayersLoaded()
+{
+	const UOBNavigationDeveloperSettings* Settings = GetDefault<UOBNavigationDeveloperSettings>();
+	if (!Settings)
+	{
+		ClearRuntimeMapLayers();
+		return;
+	}
+
+	TArray<FOBNavigationMapLayerSpec> RuntimeLayers;
+	RuntimeLayers.Reserve(Settings->PanoramicMapLayers.Num());
+	for (const FOBNavigationPanoramicMapLayer& Layer : Settings->PanoramicMapLayers)
+	{
+		if (!Layer.bEnabled)
+		{
+			continue;
+		}
+
+		const UMinimapDefinitionDataAsset* Definition = Layer.MinimapDefinition.Get();
+		FOBNavigationMapLayerSpec LayerSpec;
+		if (!LayerSpec.PopulateFromPanoramicDefinition(
+			Definition, Layer.LayerName, Layer.Priority, Layer.bClampQueriesToBounds))
+		{
+			UE_LOG(LogOBNavigation, Warning,
+			       TEXT("[%s::%hs] - Skipping invalid configured panoramic layer '%s' definition '%s'."),
+			       *GetName(), __FUNCTION__, *Layer.LayerName.ToString(),
+			       *Layer.MinimapDefinition.ToSoftObjectPath().ToString());
+			continue;
+		}
+		RuntimeLayers.Add(LayerSpec);
+	}
+
+	SetRuntimeMapLayers(RuntimeLayers);
 }
 
 void UOBNavigationSubsystem::RebuildMapLayerSpecs()

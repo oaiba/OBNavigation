@@ -9,6 +9,7 @@
 #include "OBNavigationSubsystem.generated.h"
 
 class UOBMarkerConfigAsset;
+struct FStreamableHandle;
 
 /**
  * Broadcast when the active map layer changes (e.g., player moves between
@@ -292,6 +293,12 @@ private:
 	/** Loads the DefaultMapRegistry from developer settings and populates marker tag lookup. */
 	void LoadRegistryData();
 
+	/** Starts async loading for designer-configured panoramic map layers. */
+	void LoadConfiguredRuntimeMapLayers();
+
+	/** Builds runtime layer specs after configured definitions are resident. */
+	void HandleConfiguredRuntimeMapLayersLoaded();
+
 	/** Merges RuntimeMapLayerSpecs with static layers from the registry into AllMapLayerSpecs, sorted by priority. */
 	void RebuildMapLayerSpecs();
 
@@ -394,6 +401,7 @@ private:
 	/** FTSTicker delegate handle — bound in Initialize(), unbound in Deinitialize(). */
 	FTickerDelegate TickerDelegate;
 	FTSTicker::FDelegateHandle TickerHandle;
+	TSharedPtr<FStreamableHandle> RuntimeMapLayersHandle;
 
 	/** Rebuilds the ActiveMarkers array from ActiveMarkersMap. Called after any add/remove operation. */
 	void RebuildActiveMarkersArray();

@@ -2,7 +2,7 @@
 
 ## Overview
 
-**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Multiplayer ownership, team, ping, extraction, and loot rules are supplied by game-specific bridge code such as `ExtractionCoreGame`'s `UOverlayController_Navigation`.
+**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Local team/ping presentation is supplied by `OBFrontend`'s profile-scoped `UOBNavigationViewModel`; gameplay authority remains in the shared team/ping systems.
 
 The current V1 target is a **multiplayer top-down extraction shooter**:
 
@@ -39,7 +39,7 @@ flowchart TD
     Subsystem["UOBNavigationSubsystem"]
     Source["UOBNavigationSourceComponent"]
     NavComp["UOBNavigationComponent"]
-    Bridge["ExtractionCoreGame: UOverlayController_Navigation"]
+    Bridge["OBFrontend: UOBNavigationViewModel"]
     Team["Team snapshots"]
     Pings["Replicated APingMarkerActor"]
     BaseWidget["UOBMapWidgetBase"]
@@ -313,17 +313,17 @@ Runtime methods:
 
 ## ExtractionCoreGame Integration
 
-`ExtractionCoreGame` depends on `OBNavigation` and adds `UOverlayController_Navigation`.
+`OBFrontend` depends on `OBNavigation` and adds `UOBNavigationViewModel` as the client presentation adapter.
 
 CoreGame integration bridges:
 
-- `UOverlayController_Team` teammate snapshots -> squad-only teammate markers.
+- `UOBTeamViewModel` teammate snapshots -> squad-only teammate markers.
 - replicated `APingMarkerActor` instances -> squad-only ping markers.
 - local player/team context -> `UOBNavigationSubsystem::SetLocalNavigationContext`.
 - possessed pawn -> `UOBNavigationSubsystem::SetTrackedPlayerPawn`.
 - `UMinimapDefinitionDataAsset` map definitions -> `FOBNavigationMapLayerSpec` runtime layers.
 
-To use it, add `UOverlayController_Navigation` to the HUD's `OverlayControllerClasses` in the project/HUD Blueprint. Configure marker tags and optional direct marker config overrides on the controller.
+To use it, register `UOBNavigationViewModel` in the `Presentation.Layer.Operator` layer. Configure marker tags and optional marker config assets on the ViewModel/profile; the Presentation subsystem owns lifecycle and widget placement.
 
 Ping safety is handled in `UPingComponent`:
 
@@ -333,7 +333,7 @@ Ping safety is handled in `UPingComponent`:
 
 ## Using With ExtractionCoreGame
 
-This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to `ExtractionCoreGame` systems such as `AExtractionHUD`, `UOverlayController_Navigation`, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
+This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to shared gameplay systems, `OBFrontend` Presentation profiles, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
 
 - [`Navigation_Integration_Guide.md`](../ExtractionCoreGame/Source/ExtractionCoreGame/Docs/Navigation_Integration_Guide.md)
 - [`Tiled_Minimap_Setup.md`](Docs/Tiled_Minimap_Setup.md)
@@ -393,9 +393,9 @@ Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only
    - Optionally add `DistanceText` for edge-clamped markers.
 
 9. Setup Extraction bridge:
-   - Add `UOverlayController_Navigation` to `AExtractionHUD::OverlayControllerClasses`.
-   - Configure teammate and ping marker tags/configs.
-   - Ensure `UOverlayController_Team` and `UOverlayController_InRaidMain` remain registered; HUD ordering code keeps dependencies before navigation.
+   - Add `UOBNavigationViewModel` to the `Presentation.Layer.Operator` ViewModel entries.
+   - Configure teammate and ping marker tags/configs on the ViewModel/profile.
+   - Keep `UOBTeamViewModel`, `UOBPingViewModel`, and `UOBNavigationViewModel` in the same active profile/layer scope so possession rebinding is transactional.
 
 ## Multiplayer Rules
 
