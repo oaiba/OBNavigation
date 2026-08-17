@@ -73,9 +73,9 @@ struct OBNAVIGATION_API FOBMapTileRuntimeStats
 	UPROPERTY(BlueprintReadOnly, Category = "OBNavigation|Tiles")
 	bool bIsReady = false;
 
-	/** Failure reason when State is Failed. */
+	/** Localized failure reason when State is Failed. */
 	UPROPERTY(BlueprintReadOnly, Category = "OBNavigation|Tiles")
-	FString FailureReason;
+	FText FailureReason;
 
 	/** Panoramic capture run identifier from the definition. */
 	UPROPERTY(BlueprintReadOnly, Category = "OBNavigation|Tiles")
@@ -178,8 +178,8 @@ public:
 	/** Returns the current async loading state. */
 	EOBMapTileManagerState GetState() const { return State; }
 
-	/** Returns the failure reason when HasFailed is true. */
-	const FString& GetFailureReason() const { return FailureReason; }
+	/** Returns the localized failure reason when HasFailed is true. */
+	const FText& GetFailureReason() const { return FailureReason; }
 
 	/**
 	 * Recomputes visible tiles and requests missing tile textures.
@@ -220,8 +220,8 @@ private:
 	/** Completes tile-set loading if the generation is still current. */
 	void HandleTileSetLoaded(int32 Generation);
 
-	/** Marks the manager failed and stores a human-readable reason. */
-	void SetFailed(const FString& Reason);
+	/** Marks the manager failed and stores a localized reason. */
+	void SetFailed(const FText& Reason);
 
 	/** Computes the visible map UV rectangle for the current view. */
 	bool BuildVisibleUVRect(const FOBNavigationMapViewContext& ViewContext, const FVector2D& CanvasSize,
@@ -277,8 +277,8 @@ private:
 	/** Current manager loading and validation state. */
 	EOBMapTileManagerState State = EOBMapTileManagerState::Uninitialized;
 
-	/** Human-readable failure reason when State is Failed. */
-	FString FailureReason;
+	/** Localized failure reason when State is Failed. */
+	FText FailureReason;
 
 	/** Maximum number of cached tile textures retained. */
 	int32 TileBudget = 25;

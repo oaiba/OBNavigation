@@ -21,7 +21,7 @@ void UOBMapTileManager::Initialize(const FOBNavigationMapLayerSpec& InLayerSpec,
 
 	LayerSpec = InLayerSpec;
 	TileBudget = FMath::Max(1, InTileBudget);
-	FailureReason.Reset();
+	FailureReason = FText::GetEmpty();
 	++LoadGeneration;
 	StartDefinitionLoad(LoadGeneration);
 }
@@ -30,7 +30,8 @@ void UOBMapTileManager::StartDefinitionLoad(const int32 Generation)
 {
 	if (LayerSpec.PanoramicDefinition.IsNull())
 	{
-		SetFailed(TEXT("PanoramicDefinition is null."));
+		SetFailed(NSLOCTEXT("OBNavigation", "MapTileFailureDefinitionNull",
+			"PanoramicDefinition is null."));
 		return;
 	}
 
@@ -64,13 +65,15 @@ void UOBMapTileManager::HandleDefinitionLoaded(const int32 Generation)
 
 	if (!Definition)
 	{
-		SetFailed(TEXT("Failed to load PanoramicDefinition."));
+		SetFailed(NSLOCTEXT("OBNavigation", "MapTileFailureDefinitionLoad",
+			"Failed to load PanoramicDefinition."));
 		return;
 	}
 
 	if (Definition->TileSet.IsNull())
 	{
-		SetFailed(TEXT("PanoramicDefinition has no TileSet."));
+		SetFailed(NSLOCTEXT("OBNavigation", "MapTileFailureDefinitionMissingTileSet",
+			"PanoramicDefinition has no TileSet."));
 		return;
 	}
 
@@ -110,7 +113,8 @@ void UOBMapTileManager::HandleTileSetLoaded(const int32 Generation)
 	if (!TileSet || !TileSet->IsValidTileSet())
 	{
 		TileSet = nullptr;
-		SetFailed(TEXT("Failed to load a valid TileSet."));
+		SetFailed(NSLOCTEXT("OBNavigation", "MapTileFailureTileSetLoad",
+			"Failed to load a valid TileSet."));
 		return;
 	}
 
@@ -119,7 +123,7 @@ void UOBMapTileManager::HandleTileSetLoaded(const int32 Generation)
 	State = EOBMapTileManagerState::Ready;
 }
 
-void UOBMapTileManager::SetFailed(const FString& Reason)
+void UOBMapTileManager::SetFailed(const FText& Reason)
 {
 	FailureReason = Reason;
 	State = EOBMapTileManagerState::Failed;
@@ -154,7 +158,7 @@ void UOBMapTileManager::Shutdown()
 	TileCache.Reset();
 	ActiveTiles.Reset();
 	State = EOBMapTileManagerState::Uninitialized;
-	FailureReason.Reset();
+	FailureReason = FText::GetEmpty();
 	ActiveLOD = INDEX_NONE;
 	MaxLOD = INDEX_NONE;
 	TouchCounter = 0;

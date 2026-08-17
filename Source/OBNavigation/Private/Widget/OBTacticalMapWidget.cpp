@@ -17,22 +17,22 @@
 
 namespace
 {
-FString GetTileManagerStateLabel(const EOBMapTileManagerState State)
+FText GetTileManagerStateLabel(const EOBMapTileManagerState State)
 {
 	switch (State)
 	{
 	case EOBMapTileManagerState::Uninitialized:
-		return TEXT("Uninitialized");
+		return NSLOCTEXT("OBNavigation", "MapTileStateUninitialized", "Uninitialized");
 	case EOBMapTileManagerState::LoadingDefinition:
-		return TEXT("Loading Definition");
+		return NSLOCTEXT("OBNavigation", "MapTileStateLoadingDefinition", "Loading Definition");
 	case EOBMapTileManagerState::LoadingTileSet:
-		return TEXT("Loading TileSet");
+		return NSLOCTEXT("OBNavigation", "MapTileStateLoadingTileSet", "Loading TileSet");
 	case EOBMapTileManagerState::Ready:
-		return TEXT("Ready");
+		return NSLOCTEXT("OBNavigation", "MapTileStateReady", "Ready");
 	case EOBMapTileManagerState::Failed:
-		return TEXT("Failed");
+		return NSLOCTEXT("OBNavigation", "MapTileStateFailed", "Failed");
 	default:
-		return TEXT("Unknown");
+		return NSLOCTEXT("OBNavigation", "MapTileStateUnknown", "Unknown");
 	}
 }
 }
@@ -632,7 +632,9 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 			LayerNames.Sort();
 			ActiveMarkerFilterText->SetText(FText::Format(
 				NSLOCTEXT("OBNavigation", "TacticalMapMarkerFilter", "Marker Filter: {0}"),
-				FText::AsCultureInvariant(LayerNames.IsEmpty() ? FString(TEXT("None")) : FString::Join(LayerNames, TEXT(", ")))));
+				LayerNames.IsEmpty()
+					? NSLOCTEXT("OBNavigation", "CommonNone", "None")
+					: FText::AsCultureInvariant(FString::Join(LayerNames, TEXT(", ")))));
 		}
 	}
 	if (OverlayCategoryTextBox)
@@ -690,7 +692,7 @@ void UOBTacticalMapWidget::RefreshTileDebugState()
 	{
 		TileLODText->SetText(FText::Format(
 			NSLOCTEXT("OBNavigation", "TacticalMapLodFailed", "LOD: Failed - {0}"),
-			FText::AsCultureInvariant(TileStats.FailureReason)));
+			TileStats.FailureReason));
 		return;
 	}
 
@@ -698,7 +700,7 @@ void UOBTacticalMapWidget::RefreshTileDebugState()
 	{
 		TileLODText->SetText(FText::Format(
 			NSLOCTEXT("OBNavigation", "TacticalMapLodState", "LOD: {0}"),
-			FText::AsCultureInvariant(GetTileManagerStateLabel(TileStats.State))));
+			GetTileManagerStateLabel(TileStats.State)));
 		return;
 	}
 

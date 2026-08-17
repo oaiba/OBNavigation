@@ -4,14 +4,42 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: OBNavigation\n"
-"POT-Creation-Date: 2026-08-17 08:06\n"
-"PO-Revision-Date: 2026-08-17 08:06\n"
+"POT-Creation-Date: 2026-08-17 08:34\n"
+"PO-Revision-Date: 2026-08-17 08:34\n"
 "Language-Team: \n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Key:	MapTileFailureTileSetLoad
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(116)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(116)
+msgctxt "OBNavigation,MapTileFailureTileSetLoad"
+msgid "Failed to load a valid TileSet."
+msgstr "Failed to load a valid TileSet."
+
+#. Key:	MapTileFailureDefinitionNull
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(33)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(33)
+msgctxt "OBNavigation,MapTileFailureDefinitionNull"
+msgid "PanoramicDefinition is null."
+msgstr "PanoramicDefinition is null."
+
+#. Key:	MapTileFailureDefinitionLoad
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(68)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(68)
+msgctxt "OBNavigation,MapTileFailureDefinitionLoad"
+msgid "Failed to load PanoramicDefinition."
+msgstr "Failed to load PanoramicDefinition."
+
+#. Key:	MapTileFailureDefinitionMissingTileSet
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(75)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Data/OBMapTileManager.cpp(75)
+msgctxt "OBNavigation,MapTileFailureDefinitionMissingTileSet"
+msgid "PanoramicDefinition has no TileSet."
+msgstr "PanoramicDefinition has no TileSet."
 
 #. Key:	MarkerDistanceMeters
 #. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBMapMarkerWidget.cpp(67)
@@ -26,6 +54,48 @@ msgstr "{0} m"
 msgctxt "OBNavigation,MapTileCoordinate"
 msgid "L{0} X{1} Y{2}"
 msgstr "L{0} X{1} Y{2}"
+
+#. Key:	MapTileStateUninitialized
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(25)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(25)
+msgctxt "OBNavigation,MapTileStateUninitialized"
+msgid "Uninitialized"
+msgstr "Uninitialized"
+
+#. Key:	MapTileStateLoadingDefinition
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(27)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(27)
+msgctxt "OBNavigation,MapTileStateLoadingDefinition"
+msgid "Loading Definition"
+msgstr "Loading Definition"
+
+#. Key:	MapTileStateLoadingTileSet
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(29)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(29)
+msgctxt "OBNavigation,MapTileStateLoadingTileSet"
+msgid "Loading TileSet"
+msgstr "Loading TileSet"
+
+#. Key:	MapTileStateReady
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(31)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(31)
+msgctxt "OBNavigation,MapTileStateReady"
+msgid "Ready"
+msgstr "Ready"
+
+#. Key:	MapTileStateFailed
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(33)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(33)
+msgctxt "OBNavigation,MapTileStateFailed"
+msgid "Failed"
+msgstr "Failed"
+
+#. Key:	MapTileStateUnknown
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(35)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(35)
+msgctxt "OBNavigation,MapTileStateUnknown"
+msgid "Unknown"
+msgstr "Unknown"
 
 #. Key:	TacticalMapZoom
 #. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(572)
@@ -76,51 +146,58 @@ msgctxt "OBNavigation,TacticalMapMarkerFilter"
 msgid "Marker Filter: {0}"
 msgstr "Marker Filter: {0}"
 
+#. Key:	CommonNone
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(636)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(636)
+msgctxt "OBNavigation,CommonNone"
+msgid "None"
+msgstr "None"
+
 #. Key:	TacticalMapOverlayFilter
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(655)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(655)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(657)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(657)
 msgctxt "OBNavigation,TacticalMapOverlayFilter"
 msgid "Overlay: Category={0} Tag={1}"
 msgstr "Overlay: Category={0} Tag={1}"
 
 #. Key:	TacticalMapCenter
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(661)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(661)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(663)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(663)
 msgctxt "OBNavigation,TacticalMapCenter"
 msgid "Center: {0}, {1}"
 msgstr "Center: {0}, {1}"
 
 #. Key:	TacticalMapPan
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(667)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(667)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(669)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(669)
 msgctxt "OBNavigation,TacticalMapPan"
 msgid "Pan: {0}, {1}"
 msgstr "Pan: {0}, {1}"
 
 #. Key:	TacticalMapLodUnavailable
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(685)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(685)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(687)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(687)
 msgctxt "OBNavigation,TacticalMapLodUnavailable"
 msgid "LOD: N/A"
 msgstr "LOD: N/A"
 
 #. Key:	TacticalMapLodFailed
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(692)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(692)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(694)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(694)
 msgctxt "OBNavigation,TacticalMapLodFailed"
 msgid "LOD: Failed - {0}"
 msgstr "LOD: Failed - {0}"
 
 #. Key:	TacticalMapLodState
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(700)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(700)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(702)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(702)
 msgctxt "OBNavigation,TacticalMapLodState"
 msgid "LOD: {0}"
 msgstr "LOD: {0}"
 
 #. Key:	TacticalMapLodSummary
-#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(706)
-#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(706)
+#. SourceLocation:	Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(708)
+#: Plugins/OBNavigation/Source/OBNavigation/Private/Widget/OBTacticalMapWidget.cpp(708)
 msgctxt "OBNavigation,TacticalMapLodSummary"
 msgid "LOD: {0}/{1} | Tiles: {2} active, {3} loaded, {4} cached"
 msgstr "LOD: {0}/{1} | Tiles: {2} active, {3} loaded, {4} cached"

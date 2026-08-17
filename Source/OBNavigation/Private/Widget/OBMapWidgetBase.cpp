@@ -550,7 +550,7 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 				UE_LOG(LogOBNavigation, Warning,
 				       TEXT("[%s::%hs] - Tile manager failed. Layer='%s' Definition='%s' Reason='%s'"),
 				       *GetName(), __FUNCTION__, *CurrentLayer.LayerName.ToString(), *TileStats.DefinitionPath,
-				       *TileStats.FailureReason);
+				       *TileStats.FailureReason.ToString());
 			}
 		}
 	}
