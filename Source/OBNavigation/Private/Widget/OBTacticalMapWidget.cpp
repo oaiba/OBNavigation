@@ -569,7 +569,7 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 	}
 	if (ZoomValueText)
 	{
-		ZoomValueText->SetText(FText::FromString(FString::Printf(TEXT("%.2fx"), GetMapZoom())));
+		ZoomValueText->SetText(FText::Format(NSLOCTEXT("OBNavigation", "TacticalMapZoom", "{0}x"), FText::AsNumber(GetMapZoom())));
 	}
 	if (FollowPlayerCheckBox)
 	{
@@ -577,7 +577,9 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 	}
 	if (FollowStateText)
 	{
-		FollowStateText->SetText(FText::FromString(bIsFollowingTrackedPlayer ? TEXT("Following") : TEXT("Free Pan")));
+		FollowStateText->SetText(bIsFollowingTrackedPlayer
+			? NSLOCTEXT("OBNavigation", "TacticalMapFollowing", "Following")
+			: NSLOCTEXT("OBNavigation", "TacticalMapFreePan", "Free Pan"));
 	}
 	if (LayerComboBox)
 	{
@@ -599,9 +601,9 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 			}
 		}
 
-		ActiveLayerText->SetText(FText::FromString(ActiveLayerName.IsNone()
-			                                           ? FString(TEXT("Layer: None"))
-			                                           : FString::Printf(TEXT("Layer: %s"), *ActiveLayerName.ToString())));
+		ActiveLayerText->SetText(ActiveLayerName.IsNone()
+			? NSLOCTEXT("OBNavigation", "TacticalMapLayerNone", "Layer: None")
+			: FText::Format(NSLOCTEXT("OBNavigation", "TacticalMapLayer", "Layer: {0}"), FText::AsCultureInvariant(ActiveLayerName.ToString())));
 	}
 	if (MarkerLayerComboBox)
 	{
@@ -618,7 +620,7 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 	{
 		if (!bHasMarkerLayerFilter)
 		{
-			ActiveMarkerFilterText->SetText(FText::FromString(TEXT("Marker Filter: All")));
+			ActiveMarkerFilterText->SetText(NSLOCTEXT("OBNavigation", "TacticalMapMarkerFilterAll", "Marker Filter: All"));
 		}
 		else
 		{
@@ -628,8 +630,9 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 				LayerNames.Add(LayerName.ToString());
 			}
 			LayerNames.Sort();
-			ActiveMarkerFilterText->SetText(FText::FromString(FString::Printf(TEXT("Marker Filter: %s"),
-				LayerNames.IsEmpty() ? TEXT("None") : *FString::Join(LayerNames, TEXT(", ")))));
+			ActiveMarkerFilterText->SetText(FText::Format(
+				NSLOCTEXT("OBNavigation", "TacticalMapMarkerFilter", "Marker Filter: {0}"),
+				FText::AsCultureInvariant(LayerNames.IsEmpty() ? FString(TEXT("None")) : FString::Join(LayerNames, TEXT(", ")))));
 		}
 	}
 	if (OverlayCategoryTextBox)
@@ -648,15 +651,21 @@ void UOBTacticalMapWidget::RefreshTacticalControlState()
 	{
 		const FString Category = OverlayCategoryFilter.IsNone() ? TEXT("All") : OverlayCategoryFilter.ToString();
 		const FString Tag = OverlayTagFilter.IsNone() ? TEXT("All") : OverlayTagFilter.ToString();
-		ActiveOverlayFilterText->SetText(FText::FromString(FString::Printf(TEXT("Overlay: Category=%s Tag=%s"), *Category, *Tag)));
+		ActiveOverlayFilterText->SetText(FText::Format(
+			NSLOCTEXT("OBNavigation", "TacticalMapOverlayFilter", "Overlay: Category={0} Tag={1}"),
+			FText::AsCultureInvariant(Category), FText::AsCultureInvariant(Tag)));
 	}
 	if (ViewCenterText)
 	{
-		ViewCenterText->SetText(FText::FromString(FString::Printf(TEXT("Center: %.3f, %.3f"), ViewCenterUV.X, ViewCenterUV.Y)));
+		ViewCenterText->SetText(FText::Format(
+			NSLOCTEXT("OBNavigation", "TacticalMapCenter", "Center: {0}, {1}"),
+			FText::AsNumber(ViewCenterUV.X), FText::AsNumber(ViewCenterUV.Y)));
 	}
 	if (PanInputText)
 	{
-		PanInputText->SetText(FText::FromString(FString::Printf(TEXT("Pan: %.2f, %.2f"), PanInput.X, PanInput.Y)));
+		PanInputText->SetText(FText::Format(
+			NSLOCTEXT("OBNavigation", "TacticalMapPan", "Pan: {0}, {1}"),
+			FText::AsNumber(PanInput.X), FText::AsNumber(PanInput.Y)));
 	}
 	RefreshTileDebugState();
 
@@ -673,26 +682,31 @@ void UOBTacticalMapWidget::RefreshTileDebugState()
 	const FOBMapTileRuntimeStats TileStats = GetTileRuntimeStats();
 	if (TileStats.State == EOBMapTileManagerState::Uninitialized)
 	{
-		TileLODText->SetText(FText::FromString(TEXT("LOD: N/A")));
+		TileLODText->SetText(NSLOCTEXT("OBNavigation", "TacticalMapLodUnavailable", "LOD: N/A"));
 		return;
 	}
 
 	if (TileStats.State == EOBMapTileManagerState::Failed)
 	{
-		TileLODText->SetText(FText::FromString(FString::Printf(TEXT("LOD: Failed - %s"), *TileStats.FailureReason)));
+		TileLODText->SetText(FText::Format(
+			NSLOCTEXT("OBNavigation", "TacticalMapLodFailed", "LOD: Failed - {0}"),
+			FText::AsCultureInvariant(TileStats.FailureReason)));
 		return;
 	}
 
 	if (TileStats.State != EOBMapTileManagerState::Ready)
 	{
-		TileLODText->SetText(FText::FromString(FString::Printf(TEXT("LOD: %s"), *GetTileManagerStateLabel(TileStats.State))));
+		TileLODText->SetText(FText::Format(
+			NSLOCTEXT("OBNavigation", "TacticalMapLodState", "LOD: {0}"),
+			FText::AsCultureInvariant(GetTileManagerStateLabel(TileStats.State))));
 		return;
 	}
 
-	TileLODText->SetText(FText::FromString(FString::Printf(
-		TEXT("LOD: %d/%d | Tiles: %d active, %d loaded, %d cached"),
-		TileStats.ActiveLOD, TileStats.MaxLOD, TileStats.ActiveTileCount,
-		TileStats.LoadedTileCount, TileStats.CachedTileCount)));
+	TileLODText->SetText(FText::Format(
+		NSLOCTEXT("OBNavigation", "TacticalMapLodSummary", "LOD: {0}/{1} | Tiles: {2} active, {3} loaded, {4} cached"),
+		FText::AsNumber(TileStats.ActiveLOD), FText::AsNumber(TileStats.MaxLOD),
+		FText::AsNumber(TileStats.ActiveTileCount), FText::AsNumber(TileStats.LoadedTileCount),
+		FText::AsNumber(TileStats.CachedTileCount)));
 }
 
 void UOBTacticalMapWidget::PopulateLayerComboBox()

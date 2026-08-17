@@ -703,9 +703,10 @@ void UOBMapWidgetBase::UpdateMapTiles(const FOBNavigationMapLayerSpec& CurrentLa
 			if (TileLabel)
 			{
 				TileLabel->SetVisibility(ESlateVisibility::HitTestInvisible);
-				TileLabel->SetText(FText::FromString(FString::Printf(
-					TEXT("L%d X%d Y%d"),
-					ActiveTile.Coord.LOD, ActiveTile.Coord.X, ActiveTile.Coord.Y)));
+				TileLabel->SetText(FText::Format(
+					NSLOCTEXT("OBNavigation", "MapTileCoordinate", "L{0} X{1} Y{2}"),
+					FText::AsNumber(ActiveTile.Coord.LOD), FText::AsNumber(ActiveTile.Coord.X),
+					FText::AsNumber(ActiveTile.Coord.Y)));
 				if (UCanvasPanelSlot* LabelSlot = Cast<UCanvasPanelSlot>(TileLabel->Slot))
 				{
 					LabelSlot->SetPosition(TileTopLeft + FVector2D(4.0f, 4.0f));
