@@ -2,7 +2,7 @@
 
 ## Overview
 
-**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Local team/ping presentation is supplied by `OBFrontend`'s profile-scoped `UOBNavigationViewModel`; gameplay authority remains in the shared team/ping systems.
+**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Local team/ping presentation is supplied by `LegacyClient`'s profile-scoped `UOBNavigationViewModel`; gameplay authority remains in the shared team/ping systems.
 
 The current V1 target is a **multiplayer top-down extraction shooter**:
 
@@ -39,7 +39,7 @@ flowchart TD
     Subsystem["UOBNavigationSubsystem"]
     Source["UOBNavigationSourceComponent"]
     NavComp["UOBNavigationComponent"]
-    Bridge["OBFrontend: UOBNavigationViewModel"]
+    Bridge["LegacyClient: UOBNavigationViewModel"]
     Team["Team snapshots"]
     Pings["Replicated APingMarkerActor"]
     BaseWidget["UOBMapWidgetBase"]
@@ -313,7 +313,7 @@ Runtime methods:
 
 ## ExtractionCoreGame Integration
 
-`OBFrontend` depends on `OBNavigation` and adds `UOBNavigationViewModel` as the client presentation adapter.
+`LegacyClient` depends on `OBNavigation` and adds `UOBNavigationViewModel` as the client presentation adapter.
 
 CoreGame integration bridges:
 
@@ -333,7 +333,7 @@ Ping safety is handled in `UPingComponent`:
 
 ## Using With ExtractionCoreGame
 
-This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to shared gameplay systems, `OBFrontend` Presentation profiles, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
+This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to shared gameplay systems, `LegacyClient` Presentation profiles, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
 
 - [`Navigation_Integration_Guide.md`](../ExtractionCoreGame/Source/ExtractionCoreGame/Docs/Navigation_Integration_Guide.md)
 - [`Tiled_Minimap_Setup.md`](Docs/Tiled_Minimap_Setup.md)
