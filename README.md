@@ -2,7 +2,7 @@
 
 ## Overview
 
-**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Local team/ping presentation is supplied by `LegacyClient`'s profile-scoped `UOBNavigationViewModel`; gameplay authority remains in the shared team/ping systems.
+**OBNavigation** is the reusable navigation UI core for OBExtraction. It provides runtime map-layer specs, minimap/full-map marker projection, overlay rendering, marker pooling, visibility policy filtering, and data-driven marker configuration. Local team/ping presentation is supplied by the profile-scoped `UOBNavigationViewModel` in `OBCoreGameClient`; gameplay authority remains in the shared team/ping systems.
 
 The current V1 target is a **multiplayer top-down extraction shooter**:
 
@@ -10,14 +10,14 @@ The current V1 target is a **multiplayer top-down extraction shooter**:
 - Squad-only teammate markers.
 - Squad ping markers driven by replicated ping actors.
 - Static or dynamic POI markers through `UOBNavigationSourceComponent`.
-- Runtime map layers supplied as `FOBNavigationMapLayerSpec` data, normally converted from Panoramic minimap definitions by `ExtractionCoreGame`.
+- Runtime map layers supplied as `FOBNavigationMapLayerSpec` data by the game layer.
 - Data-driven marker configs through a registry asset.
 - No fog of war, path routing, or render-target map generation in this plugin.
 
 ## Key Features
 
 - **Central subsystem:** `UOBNavigationSubsystem` owns runtime map layers, overlays, active marker objects, projection utilities, visibility filtering, and marker lifetime cleanup.
-- **Runtime map setup:** `SetRuntimeMapLayers` accepts `FOBNavigationMapLayerSpec` data. `ExtractionCoreGame` converts Panoramic `UMinimapDefinitionDataAsset` assets into those specs.
+- **Runtime map setup:** `SetRuntimeMapLayers` accepts `FOBNavigationMapLayerSpec` data. The game layer owns any conversion from Panoramic definitions.
 - **Registry-driven marker setup:** `UOBNavigationMapRegistryAsset` lists marker configs keyed by `FGameplayTag`; `UOBNavigationDeveloperSettings` points the runtime to the default marker registry.
 - **Marker spec API:** `FOBNavigationMarkerSpec` supports marker type, tracked actor, static location, lifetime, owner player id, team id, visibility policy, and sort priority.
 - **Visibility policies:** `LocalOnly`, `SquadOnly`, `Public`, and `DebugOnly` prevent unwanted enemy markers from appearing by default.
@@ -26,7 +26,7 @@ The current V1 target is a **multiplayer top-down extraction shooter**:
 - **Tactical map projection:** `UOBTacticalMapWidget` provides a north-up full-map surface with independent zoom, free pan, follow/recenter state, marker/overlay filters, and layer/floor switching.
 - **Shared map view math:** minimap markers, full-map markers, and overlays use the same `FOBNavigationMapViewContext` projection path so pan/zoom/rotation behavior stays consistent across surfaces.
 - **Widget pooling:** marker widgets are reused and removed when markers are no longer visible.
-- **Extraction integration:** `ExtractionCoreGame` bridges team snapshots and replicated ping actors into this plugin.
+- **Client integration:** `UOBNavigationViewModel` in `OBCoreGameClient` feeds local context, teammate snapshots and replicated ping markers into this plugin.
 
 ## Architecture
 
@@ -34,12 +34,12 @@ The current V1 target is a **multiplayer top-down extraction shooter**:
 flowchart TD
     Registry["UOBNavigationMapRegistryAsset (marker configs)"]
     Panoramic["Panoramic UMinimapDefinitionDataAsset"]
-    MapBridge["ExtractionCoreGame: UExtractionNavigationMapBridgeSubsystem"]
+    MapProvider["Game layer: runtime map-layer provider"]
     Settings["UOBNavigationDeveloperSettings"]
     Subsystem["UOBNavigationSubsystem"]
     Source["UOBNavigationSourceComponent"]
     NavComp["UOBNavigationComponent"]
-    Bridge["LegacyClient: UOBNavigationViewModel"]
+    Bridge["OBCoreGameClient: UOBNavigationViewModel"]
     Team["Team snapshots"]
     Pings["Replicated APingMarkerActor"]
     BaseWidget["UOBMapWidgetBase"]
@@ -49,8 +49,8 @@ flowchart TD
 
     Settings --> Registry
     Registry --> Subsystem
-    Panoramic --> MapBridge
-    MapBridge --> Subsystem
+    Panoramic --> MapProvider
+    MapProvider --> Subsystem
     NavComp --> Subsystem
     Source --> Subsystem
     Team --> Bridge
@@ -161,7 +161,7 @@ Defines one runtime map texture, bounds, projection metadata, and overlay payloa
 - `MapRotationDegrees`: rotation metadata from Panoramic capture.
 - `OverlayLayers`: marker, zone, path, and freehand overlay data.
 
-`OBNavigation` does not own editor capture or map asset generation. Use `OBPanoramicMinimapGenerator` to export `UMinimapDefinitionDataAsset`, then let `ExtractionCoreGame` convert it to runtime specs.
+`OBNavigation` does not own editor capture or map asset generation. Use `OBPanoramicMinimapGenerator` to export `UMinimapDefinitionDataAsset`. The game layer must convert those definitions to runtime specs and call `SetRuntimeMapLayers`.
 
 ### `UOBTacticalMapConfigAsset`
 
@@ -311,17 +311,15 @@ Runtime methods:
 - `UpdateVisuals(float IndicatorAngle, float ViewAngle, float ViewDistance)`
 - `UpdateDistance(float DistanceMeters, bool bIsClampedToEdge)`
 
-## ExtractionCoreGame Integration
+## Client Presentation Integration
 
-`LegacyClient` depends on `OBNavigation` and adds `UOBNavigationViewModel` as the client presentation adapter.
-
-CoreGame integration bridges:
+`OBCoreGameClient` provides `UOBNavigationViewModel` as the client presentation adapter. It bridges:
 
 - `UOBTeamViewModel` teammate snapshots -> squad-only teammate markers.
 - replicated `APingMarkerActor` instances -> squad-only ping markers.
 - local player/team context -> `UOBNavigationSubsystem::SetLocalNavigationContext`.
 - possessed pawn -> `UOBNavigationSubsystem::SetTrackedPlayerPawn`.
-- `UMinimapDefinitionDataAsset` map definitions -> `FOBNavigationMapLayerSpec` runtime layers.
+- Runtime map-layer specs are injected separately by the game layer through `SetRuntimeMapLayers`.
 
 To use it, register `UOBNavigationViewModel` in the `Presentation.Layer.Operator` layer. Configure marker tags and optional marker config assets on the ViewModel/profile; the Presentation subsystem owns lifecycle and widget placement.
 
@@ -331,23 +329,22 @@ Ping safety is handled in `UPingComponent`:
 - Server validates owner player id, ping tag validity, distance from pawn, and cooldown.
 - Ping actors remain the replicated authoritative source; navigation only visualizes them.
 
-## Using With ExtractionCoreGame
+## Game Integration
 
-This README is the core plugin/API reference. For the production workflow that connects `OBNavigation` to shared gameplay systems, `LegacyClient` Presentation profiles, team snapshots, replicated pings, extraction zones, loot hotspots, and designer asset setup, use the runbook:
+Use these setup guides for the map assets and materials:
 
-- [`Navigation_Integration_Guide.md`](../ExtractionCoreGame/Source/ExtractionCoreGame/Docs/Navigation_Integration_Guide.md)
 - [`Tiled_Minimap_Setup.md`](Docs/Tiled_Minimap_Setup.md)
 - [`Minimap_Material_Setup.md`](Docs/Minimap_Material_Setup.md)
 - [`Tiled_Minimap_Tile_Material_Setup.md`](Docs/Tiled_Minimap_Tile_Material_Setup.md)
 
-Keep gameplay authority and filtering rules in `ExtractionCoreGame`; submit only approved marker specs or source components to `UOBNavigationSubsystem`.
+Keep gameplay authority and filtering rules in the game runtime; submit only approved marker specs or source components to `UOBNavigationSubsystem`.
 
 ## Integration Guide
 
 1. Create Panoramic minimap definitions:
    - Use `OBPanoramicMinimapGenerator` to capture/export `UMinimapDefinitionDataAsset` assets.
    - Ensure each definition has `BaseMapTexture`, valid `WorldBounds`, `OutputSize`, and overlay data if needed.
-   - Add those assets to **Project Settings -> Extraction Navigation -> Panoramic Map Layers**.
+   - Build `FOBNavigationMapLayerSpec` entries in the game layer and pass them to `UOBNavigationSubsystem::SetRuntimeMapLayers`.
    - Use `Priority` for overlapping indoor/floor/zone maps.
 
 2. Create marker config assets:
@@ -436,7 +433,7 @@ Widgets should skip or clamp markers only after checking the projection result. 
 - No shared drawn routes.
 - No render-target map capture inside `OBNavigation`; map capture is handled by `OBPanoramicMinimapGenerator`.
 - Tactical map provides optional in-widget controls, but not a finished screen flow; HUD open/close, input mode, pause behavior, animation, and project-specific hotkey labels are intentionally owned by the game/UI layer.
-- Registry asset must be configured in Project Settings for marker tag lookup. Map layers must be supplied through runtime specs, normally by `ExtractionCoreGame`.
+- Registry asset must be configured in Project Settings for marker tag lookup. Map layers must be supplied by the game layer through runtime specs.
 
 ## Build Verification
 

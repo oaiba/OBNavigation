@@ -5,7 +5,7 @@
 Tài liệu này giả định project đang dùng:
 
 - `OBPanoramicMinimapGenerator` để capture/export `UMinimapDefinitionDataAsset`.
-- Project settings của `ExtractionCoreGame` để đưa các Panoramic map layer vào `UOBNavigationSubsystem`.
+- Game runtime build `FOBNavigationMapLayerSpec` records and passes them to `UOBNavigationSubsystem`.
 - `UOBMinimapWidget` và `UOBTacticalMapWidget` làm UI runtime.
 
 ---
@@ -46,23 +46,18 @@ Hành vi runtime:
 
 ## 2. Đăng Ký Map Layer
 
-Với OBExtraction, cấu hình layer tại:
+Không có Project Settings panel cho Panoramic layer trong runtime plugin. Game
+code chịu trách nhiệm:
 
-```text
-Project Settings -> Extraction Navigation -> Panoramic Map Layers
-```
+1. Load từng `UMinimapDefinitionDataAsset` cần cho map.
+2. Chuyển texture, bounds, output size, rotation và overlay data thành
+   `FOBNavigationMapLayerSpec`.
+3. Gọi `UOBNavigationSubsystem::SetRuntimeMapLayers` khi world/map đã sẵn sàng.
+4. Chọn layer priority ổn định cho map nhiều tầng hoặc bounds bị overlap.
 
-Với mỗi layer:
-
-| Trường | Cách thiết lập |
-|---|---|
-| `MinimapDefinition` | Gán `UMinimapDefinitionDataAsset` đã export. |
-| `LayerName` | Dùng tên ổn định như `GroundFloor`, `Basement`, hoặc `MainMap`. |
-| `Priority` | Priority cao hơn thắng khi bounds của các layer overlap. |
-| `bClampQueriesToBounds` | Thường nên bật cho UI minimap/tactical map. |
-| `bEnabled` | Bật để layer được dùng ở runtime. |
-
-Bridge sẽ build `FOBNavigationMapLayerSpec` từ Panoramic definition. Không cần tạo tile asset thủ công trong OBNavigation.
+Default marker registry được cấu hình riêng tại
+`Project Settings -> OB Navigation -> Default Map Registry`. Không cần tạo tile
+asset thủ công trong OBNavigation.
 
 ---
 
@@ -228,7 +223,8 @@ Khuyến nghị layout cho minimap tròn:
 
 Khi game start hoặc khi possession:
 
-1. Đảm bảo `UExtractionNavigationMapBridgeSubsystem` đã load các `PanoramicMapLayers` được cấu hình.
+1. Game layer tạo `FOBNavigationMapLayerSpec` records từ definitions và gọi
+   `UOBNavigationSubsystem::SetRuntimeMapLayers`.
 2. Set tracked pawn local:
 
 ```cpp
