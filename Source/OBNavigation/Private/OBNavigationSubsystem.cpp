@@ -116,6 +116,19 @@ namespace
 	}
 }
 
+bool UOBNavigationSubsystem::ShouldCreateSubsystem(UObject* Outer) const
+{
+	(void)Outer;
+	/*
+	 * TEMPORARY OPT-OUT:
+	 * The current game flow does not use OBNavigation, while its pawn tracking emits
+	 * noisy diagnostics during PIE. Returning false prevents subsystem creation, so
+	 * registry/map assets are not loaded and the per-frame navigation ticker is not started.
+	 * Restore Super::ShouldCreateSubsystem(Outer) when the Navigation feature is integrated.
+	 */
+	return false;
+}
+
 void UOBNavigationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);

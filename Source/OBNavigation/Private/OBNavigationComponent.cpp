@@ -25,8 +25,8 @@ void UOBNavigationComponent::BeginPlay()
 
 	if (!NavSubsystem)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s::%hs] - OBNavigationSubsystem is not valid! Cannot perform navigation tasks."),
-			   *GetName(), __FUNCTION__);
+		// OBNavigationSubsystem::ShouldCreateSubsystem currently opts out intentionally.
+		// Leave pawn components dormant and quiet until the feature is integrated again.
 		return;
 	}
 

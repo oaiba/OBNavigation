@@ -72,6 +72,13 @@ public:
 	// -----------------------------------------------------------------------
 
 	/**
+	 * Lets projects opt out before this subsystem is instantiated. When disabled,
+	 * consumers must tolerate GetSubsystem returning null; the pawn component treats
+	 * that as an intentional no-op while this opt-out is active.
+	 */
+	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
+
+	/**
 	 * Called by the engine when the GameInstance starts. Loads the default
 	 * map registry, builds lookup tables, and starts the frame ticker.
 	 */
