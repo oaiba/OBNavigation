@@ -109,10 +109,21 @@ void UOBMapWidgetBase::InitializeMapWidget(UOBMinimapConfigAsset* InVisualConfig
 	SetMapZoom(CurrentZoom);
 	EnsureOverlayWidget();
 
-	if (!MapMaterialInstance || !NavSubsystem || !GetMarkerCanvas())
+	if (!NavSubsystem)
+	{
+		// UOBNavigationSubsystem::ShouldCreateSubsystem opts out until the navigation feature is
+		// integrated, so a missing subsystem is an expected configuration, not a content error.
+		UE_LOG(LogOBNavigation, Log,
+		       TEXT("[%s::%hs] - Navigation subsystem is disabled; map widget stays hidden."),
+		       *GetName(), __FUNCTION__);
+		SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	if (!MapMaterialInstance || !GetMarkerCanvas())
 	{
 		UE_LOG(LogOBNavigation, Error,
-		       TEXT("[%s::%hs] - Initialization failed due to missing subsystem, material, or marker canvas."),
+		       TEXT("[%s::%hs] - Initialization failed due to missing material or marker canvas."),
 		       *GetName(), __FUNCTION__);
 		SetVisibility(ESlateVisibility::Collapsed);
 		return;
